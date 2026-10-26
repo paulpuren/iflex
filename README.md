@@ -150,7 +150,7 @@ Run the lightweight configuration regression suite with:
 python -m unittest discover -s tests -v
 ```
 
-GPU training and evaluation require the matching datasets and checkpoints. Record package versions, GPU hardware, random seeds, data splits, and the exact configuration when reporting results. See [REVIEW.md](REVIEW.md) for the publication review and remaining limitations.
+GPU training and evaluation require the matching datasets and checkpoints. Record package versions, GPU hardware, random seeds, data splits, and the exact configuration when reporting results.
 
 
 ## Citation
