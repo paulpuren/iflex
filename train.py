@@ -1,7 +1,11 @@
+from utils.config import parse_args_with_yaml
+import argparse
+import json
 import os, sys, time
 import numpy as np
 import wandb
 import torch
+import yaml
 from torch.utils.data import Dataset, DataLoader
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -9,12 +13,17 @@ from torch.distributed import init_process_group, destroy_process_group, barrier
 # from diffusers.optimization import get_linear_schedule_with_warmup as scheduler
 from diffusers.optimization import get_cosine_schedule_with_warmup as scheduler
 from src.plotting import plot_samples
-from utils.params import get_args
-from utilities import *
+from utils.params import build_parser
+from src.utilities import *
 
 
 import warnings
 warnings.filterwarnings("ignore")
+
+
+def get_args_with_yaml():
+    return parse_args_with_yaml(build_parser())
+
 
 def ddp_setup(local_rank, world_size):
     """
@@ -23,12 +32,14 @@ def ddp_setup(local_rank, world_size):
         world_size: Total number of processes
     """
     
+    backend = "nccl" if torch.cuda.is_available() else "gloo"
+
     if "MASTER_ADDR" not in os.environ:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "3522"
         
         init_process_group(
-            backend = "gloo", # nccl for multi-gpu, gloo for single-gpu
+            backend = backend,
             rank = local_rank, 
             world_size = world_size
         )
@@ -36,7 +47,7 @@ def ddp_setup(local_rank, world_size):
         
     else:
         init_process_group(
-            backend="gloo", 
+            backend = backend,
             init_method='env://'
         )
         #overwrite variables with correct values from env
@@ -44,7 +55,9 @@ def ddp_setup(local_rank, world_size):
         rank = get_rank()
 
     torch.cuda.set_device(local_rank)
+    torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.allow_tf32 = True
     return local_rank, rank
 
 class Trainer:
@@ -57,8 +70,11 @@ class Trainer:
             gpu_id: int,
             local_gpu_id: int,
             sampling_freq: int,
+            validation_freq: int,
             run: wandb,
-            run_name: str
+            run_name: str,
+            checkpoint_path: str = "",
+            ddp_find_unused_parameters: bool = False,
         ) -> None:
         
         self.gpu_id = gpu_id
@@ -68,13 +84,26 @@ class Trainer:
         self.val_loader = val_loader
         self.optimizer = optimizer
         self.sampling_freq = sampling_freq
+        self.validation_freq = max(1, int(validation_freq))
+        self.checkpoint_path = checkpoint_path
         self.model = DDP(
             model, 
             device_ids = [local_gpu_id], 
-            find_unused_parameters = True
+            find_unused_parameters = ddp_find_unused_parameters
         )
         self.run = run
         self.run_name = run_name
+        self.progress_path = os.path.join("./checkpoints", f"progress_{self.run_name}.json")
+
+    def _write_progress(self, epoch, max_epochs, completed=False):
+        progress = {
+            "run_name": self.run_name,
+            "epoch": int(epoch),
+            "max_epochs": int(max_epochs),
+            "completed": bool(completed),
+        }
+        with open(self.progress_path, "w", encoding="utf-8") as f:
+            json.dump(progress, f, indent=2, sort_keys=True)
     
     def _run_batch(
             self, 
@@ -88,7 +117,6 @@ class Trainer:
         self.optimizer.zero_grad()
         # if isinstance(self.model.module, DiffusionModel):
         #     reynolds_number = reynolds_number.unsqueeze(-1)
-        
         loss = self.model(
             targets, 
             condition_start, 
@@ -98,7 +126,7 @@ class Trainer:
             total_interp_steps
         )
         loss.backward()
-        if isinstance(self.model.module, DiffusionModel):
+        if isinstance(self.model.module, (DiffusionModel, DiffusionModelResidual)):
             torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.)
         self.optimizer.step()
         self.lr_scheduler.step()
@@ -106,20 +134,21 @@ class Trainer:
         return loss.item()
 
     def _run_epoch(self, epoch):        
+        self.model.train()
         self.train_loader.sampler.set_epoch(epoch)
         loss_values_task = []
         for inputs, targets, cond_params in self.train_loader:
             # Unpack the input tuple
             condition_start, condition_end = inputs
-            condition_start = condition_start.to(self.local_gpu_id)
-            condition_end = condition_end.to(self.local_gpu_id)
-            targets = targets.to(self.local_gpu_id)
+            condition_start = condition_start.to(self.local_gpu_id, non_blocking=True)
+            condition_end = condition_end.to(self.local_gpu_id, non_blocking=True)
+            targets = targets.to(self.local_gpu_id, non_blocking=True)
             
             # Unpack the condition parameters
             target_interp_step, total_interp_steps, reynolds_number = cond_params
-            reynolds_number = reynolds_number.to(self.local_gpu_id)
-            target_interp_step = target_interp_step.to(self.local_gpu_id)
-            total_interp_steps = total_interp_steps.to(self.local_gpu_id)
+            reynolds_number = reynolds_number.to(self.local_gpu_id, non_blocking=True)
+            target_interp_step = target_interp_step.to(self.local_gpu_id, non_blocking=True)
+            total_interp_steps = total_interp_steps.to(self.local_gpu_id, non_blocking=True)
             
             loss_task = self._run_batch(
                 targets, 
@@ -130,7 +159,8 @@ class Trainer:
                 total_interp_steps
             )
             loss_values_task.append(loss_task)
-        self.run.log({"Train loss": np.mean(loss_values_task)})
+        if self.local_gpu_id == 0 and self.run is not None:
+            self.run.log({"Train loss": np.mean(loss_values_task)})
 
         return loss_values_task
 
@@ -139,33 +169,33 @@ class Trainer:
         loss_values_task = []
         
         with self.model.module.ema.average_parameters():
+            self.model.eval()
             with torch.no_grad():
-                self.model.eval()
+                for inputs, targets, cond_params in self.val_loader:
+                    # Unpack the input tuple
+                    condition_start, condition_end = inputs
+                    condition_start = condition_start.to(self.local_gpu_id, non_blocking=True)
+                    condition_end = condition_end.to(self.local_gpu_id, non_blocking=True)
+                    targets = targets.to(self.local_gpu_id, non_blocking=True)
 
-            for inputs, targets, cond_params in self.val_loader:
-                # Unpack the input tuple
-                condition_start, condition_end = inputs
-                condition_start = condition_start.to(self.local_gpu_id)
-                condition_end = condition_end.to(self.local_gpu_id)
-                targets = targets.to(self.local_gpu_id)
-                
-                # Unpack the condition parameters
-                target_interp_step, total_interp_steps, reynolds_number = cond_params
-                reynolds_number = reynolds_number.to(self.local_gpu_id)
-                target_interp_step = target_interp_step.to(self.local_gpu_id)
-                total_interp_steps = total_interp_steps.to(self.local_gpu_id)
+                    # Unpack the condition parameters
+                    target_interp_step, total_interp_steps, reynolds_number = cond_params
+                    reynolds_number = reynolds_number.to(self.local_gpu_id, non_blocking=True)
+                    target_interp_step = target_interp_step.to(self.local_gpu_id, non_blocking=True)
+                    total_interp_steps = total_interp_steps.to(self.local_gpu_id, non_blocking=True)
 
-                # predict
-                val_loss = self.model(
-                    targets, 
-                    condition_start, 
-                    condition_end, 
-                    reynolds_number, 
-                    target_interp_step,
-                    total_interp_steps
-                )
-                loss_values_task.append(val_loss.item())
-        self.run.log({"Val loss": np.mean(loss_values_task)})
+                    # predict
+                    val_loss = self.model(
+                        targets,
+                        condition_start,
+                        condition_end,
+                        reynolds_number,
+                        target_interp_step,
+                        total_interp_steps
+                    )
+                    loss_values_task.append(val_loss.item())
+        if self.local_gpu_id == 0 and self.run is not None:
+            self.run.log({"Val loss": np.mean(loss_values_task)})
 
         return loss_values_task
 
@@ -188,14 +218,14 @@ class Trainer:
                 # unpack the data
                 inputs, targets, cond_params = next(iter(self.train_loader))
                 condition_start, condition_end = inputs
-                condition_start = condition_start.to(self.local_gpu_id)
-                condition_end = condition_end.to(self.local_gpu_id)
+                condition_start = condition_start.to(self.local_gpu_id, non_blocking=True)
+                condition_end = condition_end.to(self.local_gpu_id, non_blocking=True)
                 
                 # unpack the condition parameters
                 target_interp_step, total_interp_steps, reynolds_number = cond_params
-                reynolds_number = reynolds_number.to(self.local_gpu_id)
-                target_interp_step = target_interp_step.to(self.local_gpu_id)
-                total_interp_steps = total_interp_steps.to(self.local_gpu_id)
+                reynolds_number = reynolds_number.to(self.local_gpu_id, non_blocking=True)
+                target_interp_step = target_interp_step.to(self.local_gpu_id, non_blocking=True)
+                total_interp_steps = total_interp_steps.to(self.local_gpu_id, non_blocking=True)
                 # print(f'Type {type(target_interp_step)}')
 
                 # if isinstance(self.model.module, DiffusionModel):
@@ -214,62 +244,106 @@ class Trainer:
         plot_samples(samples, condition_start, targets, sample_path, epoch)
         print(f"Epoch {epoch} | Generated samples saved at {sample_path}")
 
-    def _save_checkpoint(self, epoch, name=''):
+    def _save_checkpoint(self, epoch, max_epochs, name='', completed=False):
         checkpoint_dir = "./checkpoints"
         os.makedirs(checkpoint_dir, exist_ok=True)
 
-        save_path = "{}/checkpoint_{}.pt".format(
+        save_path = "{}/checkpoint_{}{}.pt".format(
             checkpoint_dir,
-            self.run_name
+            self.run_name,
+            name,
+        ) if name else "{}/checkpoint_{}.pt".format(
+            checkpoint_dir,
+            self.run_name,
         )
         save_dict = {
             'model': self.model.module.state_dict(),
             'ema': self.model.module.ema.state_dict(),
-            'optimizer': self.optimizer.state_dict()
+            'optimizer': self.optimizer.state_dict(),
+            'epoch': int(epoch),
         }
         torch.save(save_dict, save_path)
+        self._write_progress(epoch=epoch, max_epochs=max_epochs, completed=completed)
         
-        if name == '':
-            print(f"Epoch {epoch} | Training checkpoint saved at {save_path}")
+        print(f"Epoch {epoch} | Training checkpoint saved at {save_path}")
 
-    def train(self, max_epochs: int):
+    def train(self, max_epochs: int, start_epoch: int = 0):
         print('--- Starting training ---')
-        # self.lr_scheduler = scheduler(
-        #     optimizer = self.optimizer,
-        #     num_warmup_steps = len(self.train_loader) * 3, # short warmup phase
-        #     num_training_steps = (len(self.train_loader) * max_epochs)
-        # )
-        self.lr_scheduler = scheduler(
-            optimizer = self.optimizer,
-            num_warmup_steps = len(self.train_loader) * 1, # short warmup phase
-            num_training_steps = (len(self.train_loader) * max_epochs)
-        )
+        if self.checkpoint_path == '':
+            self.lr_scheduler = scheduler(
+                optimizer = self.optimizer,
+                num_warmup_steps = len(self.train_loader) * 3,
+                num_training_steps = (len(self.train_loader) * max_epochs)
+            )
+        else:
+            self.lr_scheduler = scheduler(
+                optimizer = self.optimizer,
+                num_warmup_steps = len(self.train_loader) * 0,
+                num_training_steps = (len(self.train_loader) * max_epochs)
+            )
+
+        if start_epoch > 0:
+            self.lr_scheduler.step(start_epoch * len(self.train_loader))
+
         best_mse = np.inf
         self.model.train()
-        for epoch in range(max_epochs):
+
+        if start_epoch >= max_epochs:
+            if self.local_gpu_id == 0:
+                self._write_progress(
+                    epoch=max_epochs,
+                    max_epochs=max_epochs,
+                    completed=True
+                )
+                print(f"Run already complete at epoch {start_epoch}.")
+            return
+
+        for epoch in range(start_epoch, max_epochs):
             # train one epoch
             train_loss_values = self._run_epoch(epoch)
-            # val_loss_values = self.val_epoch(epoch)
-            val_loss_values = train_loss_values 
+            run_validation = (
+                epoch == 0 or
+                (epoch + 1) % self.validation_freq == 0 or
+                (epoch + 1) == max_epochs
+            )
+            avg_val_loss = None
+            if run_validation:
+                val_loss_values = self.val_epoch(epoch)
+                avg_val_loss = np.mean(val_loss_values)
 
             if self.local_gpu_id == 0:
                 avg_train_loss = np.mean(train_loss_values)
-                avg_val_loss = np.mean(val_loss_values)
-                print("Epoch {} | Train loss {:.4f} | Val loss {:.4f} | learning rate {:.6f}".format(
-                    epoch + 1, 
-                    avg_train_loss, 
-                    avg_val_loss,
-                    self.lr_scheduler.get_last_lr()[0]
-                ))
-                # self.run.log({"loss": avg_loss})
+                if avg_val_loss is None:
+                    print("Epoch {} | Train loss {:.4f} | Val loss skipped | learning rate {:.6f}".format(
+                        epoch + 1,
+                        avg_train_loss,
+                        self.lr_scheduler.get_last_lr()[0]
+                    ))
+                else:
+                    print("Epoch {} | Train loss {:.4f} | Val loss {:.4f} | learning rate {:.6f}".format(
+                        epoch + 1,
+                        avg_train_loss,
+                        avg_val_loss,
+                        self.lr_scheduler.get_last_lr()[0]
+                    ))
                 self.run.log({"Train loss": avg_train_loss})
-                self.run.log({"Val loss": avg_val_loss})
+                if avg_val_loss is not None:
+                    self.run.log({"Val loss": avg_val_loss})
 
-                # Save the last and best checkpoint
-                self._save_checkpoint(epoch + 1, name = '_last')
+                # save the latest checkpoint
+                self._save_checkpoint(
+                    epoch+1,
+                    max_epochs=max_epochs,
+                    name='_last'
+                )
                 
-                if best_mse > avg_val_loss:
-                    self._save_checkpoint(epoch + 1, name='_best')
+                if avg_val_loss is not None and best_mse > avg_val_loss:
+                    # save the best checkpoint
+                    self._save_checkpoint(
+                        epoch+1,
+                        max_epochs=max_epochs,
+                        name='_best'
+                    )
                     best_mse = avg_val_loss
 
                 # Generate samples at specified intervals
@@ -280,10 +354,18 @@ class Trainer:
                 ):
                     self._generate_samples(epoch+1)
 
+        if self.local_gpu_id == 0:
+            self._write_progress(
+                epoch=max_epochs,
+                max_epochs=max_epochs,
+                completed=True
+            )
+
 def main(
         rank: int, 
         world_size: int, 
         sampling_freq: int, 
+        validation_freq: int,
         epochs: int, 
         batch_size: int, 
         run, 
@@ -297,23 +379,59 @@ def main(
     print("device: ", device)
     
     train_set, val_set, model, optimizer, ema = load_train_objs(args = args)
-    # train_loader, val_loader = prepare_dataloader(dataset, batch_size)
-    train_loader = prepare_dataloader(train_set, batch_size)
-    val_loader = prepare_dataloader(val_set, batch_size)
+
+    run = None
+    if rank == 0:
+        wandb.login()
+        run = wandb.init(
+            project = "InterpDM",
+            name = args.run_name,
+            config = {
+                "learning_rate": args.learning_rate,
+                "epochs": args.epochs,
+                "batch size": args.batch_size,
+                "total_interp_steps": args.total_interp_steps_train
+            },
+        )
+
+    train_loader = prepare_dataloader(
+        train_set,
+        batch_size,
+        num_workers = args.num_workers,
+        persistent_workers = args.persistent_workers,
+        prefetch_factor = args.prefetch_factor,
+    )
+    val_loader = prepare_dataloader(
+        val_set,
+        batch_size,
+        num_workers = args.num_workers,
+        persistent_workers = args.persistent_workers,
+        prefetch_factor = args.prefetch_factor,
+    )
 
     if ema is not None:
         model.ema = ema
-    # torch.cuda.set_device(device)
     model = model.to(device)
 
     # post-training checkpoint loading
+    start_epoch = 0
     if args.checkpoint_path != '':
-        model, ema, optimizer = load_checkpoint(
+        model, ema, optimizer, start_epoch = load_checkpoint(
             args.checkpoint_path, 
             model, 
             optimizer, 
-            device
+            device,
+            load_optimizer_state=args.resume_training,
         )
+        if not args.resume_training:
+            start_epoch = 0
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = args.learning_rate
+                param_group["initial_lr"] = args.learning_rate
+        print("Configured learning rate:", args.learning_rate)
+        print("Optimizer learning rate after resume:", optimizer.param_groups[0]["lr"])
+        print("Resume training:", args.resume_training)
+        print("Starting from epoch:", start_epoch)
     
     # Model summary
     print("**************")
@@ -333,37 +451,29 @@ def main(
         gpu_id = rank, 
         local_gpu_id = local_rank, 
         sampling_freq = sampling_freq, 
+        validation_freq = validation_freq,
         run = run, 
-        run_name = args.run_name
+        run_name = args.run_name,
+        checkpoint_path = args.checkpoint_path,
+        ddp_find_unused_parameters = args.ddp_find_unused_parameters,
     )
-    trainer.train(epochs)
+    trainer.train(epochs, start_epoch=start_epoch)
     end = time.time()
     print("Training time: ", end - start)
+    if run is not None:
+        run.finish()
     destroy_process_group()
 
 if __name__ == "__main__":
-    args = get_args()
+    args = get_args_with_yaml()
 
     # Launch processes.
     print('Launching processes...')
     
-    # wandb.login()
-    wandb.login(key = "5282eaefee2cb8f881265effb6251abf1703deee")
     args.run_name = get_run_name(args)
-    run = wandb.init(
-        # Set the project where this run will be logged
-        project = "InterpDM",
-        name = args.run_name,
-        # Track hyperparameters and run metadata
-        config = {
-            "learning_rate": args.learning_rate,
-            "epochs": args.epochs,
-            "batch size": args.batch_size,
-            "total_interp_steps": args.total_interp_steps_train
-        },
-    )
-
     world_size = torch.cuda.device_count()
+    if world_size == 0:
+        raise RuntimeError("Training requires at least one visible CUDA GPU.")
     print("world size: ", world_size)
     
     if world_size == 1:
@@ -371,9 +481,10 @@ if __name__ == "__main__":
             0, 
             world_size, 
             args.sampling_freq, 
+            args.validation_freq,
             args.epochs, 
             args.batch_size, 
-            run, 
+            None,
             args
         )
     else:
@@ -382,11 +493,11 @@ if __name__ == "__main__":
             args = (
                 world_size, 
                 args.sampling_freq, 
+                args.validation_freq,
                 args.epochs, 
                 args.batch_size, 
-                run, 
+                None,
                 args
             ), 
             nprocs = world_size
         )
-

@@ -1,0 +1,20 @@
+# SuperSloMo conditioned like FLEX: Fourier features of log(Re) and bottleneck FiLM.
+run_name: SuperSloMo_Re
+data_name: nskt
+model: SuperSloMo
+condition_on_re: true
+reynolds_normalization_scale: 40000.0
+sampling_freq: 5
+optimizer: adam
+epochs: 200
+batch_size: 64
+learning_rate: 6.0e-5
+checkpoint_path: ''
+total_interp_steps_train: 20
+is_T_fixed: true
+patch_size: 256
+stride: 32
+scratch_dir: /global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/
+prediction_type: v
+sampler: ddim
+base_width: 128

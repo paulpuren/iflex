@@ -6,11 +6,13 @@ cd ../../
 
 PRETRAINED_CHECKPOINT="./checkpoints/checkpoint_Model_UNet_Data_nskt_Optim_adam_lr0.0001_epoch200_stride32_T20_TfixedFalse.pt"
 
+# select 12000, 24000, and 36000: 5, 7, 9 for eval OOD generalization
+
 # run nskt
 python eval.py \
     --model UNet \
     --data_name 'nskt' \
-    --re_id 0 \
+    --re_id 9 \
     --optimizer 'adam' \
     --epochs 200 \
     --batch_size 8 \

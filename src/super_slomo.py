@@ -12,6 +12,50 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import math
+
+
+DATASET_TIME_CONFIGS = {
+    "nskt": {"total_interp_steps": 20},
+    "shanghai": {"total_interp_steps": 8},
+    "sea_temp": {"total_interp_steps": 10},
+    "sst": {"total_interp_steps": 10},
+}
+
+
+def normalize_dataset_name(data_name):
+    if data_name is None:
+        raise ValueError("data_name must be provided for SuperSloMo time-grid setup.")
+
+    normalized = str(data_name).strip().lower()
+    if normalized == "sst":
+        normalized = "sea_temp"
+    if normalized not in {"nskt", "shanghai", "sea_temp"}:
+        raise ValueError(
+            f"Unsupported dataset '{data_name}' for SuperSloMo. "
+            "Expected one of: nskt, shanghai, sea_temp/sst."
+        )
+    return normalized
+
+
+def build_time_grid(data_name, total_interp_steps=None):
+    dataset_name = normalize_dataset_name(data_name)
+    config = DATASET_TIME_CONFIGS[dataset_name]
+    interp_steps = int(
+        config["total_interp_steps"] if total_interp_steps is None else total_interp_steps
+    )
+    T = interp_steps + 1
+    if dataset_name == "nskt":
+        t = np.linspace(0.0, 5e-4 * T, T, dtype=np.float32)
+    else:
+        t = np.linspace(0.0, 1.0, T, dtype=np.float32)
+    return T, t
+
+
+def configure_time_grid(data_name, total_interp_steps=None):
+    global T, t
+    T, t = build_time_grid(data_name, total_interp_steps)
+    return T, t
 
 
 class down(nn.Module):
@@ -46,8 +90,6 @@ class down(nn.Module):
                 filter size for the convolution filter. input N would create
                 a N x N filter.
         """
-
-
         super(down, self).__init__()
         # Initialize convolutional layers.
         self.conv1 = nn.Conv2d(inChannels,  outChannels, filterSize, stride=1, padding=int((filterSize - 1) / 2))
@@ -143,6 +185,27 @@ class up(nn.Module):
 
 
 
+class ReynoldsFiLM(nn.Module):
+    """FLEX-style Fourier embedding of log(Re), projected to FiLM parameters."""
+
+    def __init__(self, channels, hidden_dim=128, num_bands=16):
+        super().__init__()
+        self.register_buffer("freqs", 2.0 ** torch.arange(num_bands, dtype=torch.float32), persistent=False)
+        self.net = nn.Sequential(
+            nn.Linear(1 + 2 * num_bands, hidden_dim), nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.SiLU(),
+            nn.Linear(hidden_dim, 2 * channels),
+        )
+        nn.init.zeros_(self.net[-1].weight)
+        nn.init.zeros_(self.net[-1].bias)
+
+    def forward(self, reynolds):
+        value = reynolds.reshape(reynolds.shape[0], -1)[:, :1].float().clamp_min(1e-8).log()
+        angles = value.unsqueeze(-1) * self.freqs.view(1, 1, -1) * (2.0 * math.pi)
+        features = torch.cat((value, torch.sin(angles).flatten(1), torch.cos(angles).flatten(1)), dim=1)
+        return self.net(features)
+
+
 class UNet(nn.Module):
     """
     A class for creating UNet like architecture as specified by the
@@ -158,7 +221,7 @@ class UNet(nn.Module):
     """
 
 
-    def __init__(self, inChannels, outChannels):
+    def __init__(self, inChannels, outChannels, condition_on_re=False):
         """
         Parameters
         ----------
@@ -184,8 +247,10 @@ class UNet(nn.Module):
         self.up4   = up(128, 64)
         self.up5   = up(64, 32)
         self.conv3 = nn.Conv2d(32, outChannels, 3, stride=1, padding=1)
+        self.condition_on_re = bool(condition_on_re)
+        self.reynolds_film = ReynoldsFiLM(512) if self.condition_on_re else None
         
-    def forward(self, x):
+    def forward(self, x, reynolds=None):
         """
         Returns output tensor after passing input `x` to the neural network.
 
@@ -208,6 +273,12 @@ class UNet(nn.Module):
         s4 = self.down3(s3)
         s5 = self.down4(s4)
         x  = self.down5(s5)
+        if self.reynolds_film is not None:
+            if reynolds is None:
+                raise ValueError("Re-conditioned SuperSloMo requires Reynolds values.")
+            scale, shift = self.reynolds_film(reynolds).chunk(2, dim=1)
+            x = x * (1.0 + scale[..., None, None].to(x.dtype))
+            x = x + shift[..., None, None].to(x.dtype)
         x  = self.up1(x, s5)
         x  = self.up2(x, s4)
         x  = self.up3(x, s3)
@@ -275,8 +346,6 @@ class backWarp(nn.Module):
             tensor
                 frame I0.
         """
-
-
         # Extract horizontal and vertical flows.
         u = flow[:, 0, :, :]
         v = flow[:, 1, :, :]
@@ -292,15 +361,10 @@ class backWarp(nn.Module):
         return imgOut
 
 
-# Creating an array of `t` values for the 7 intermediate frames between
-# reference frames I0 and I1. 
-# TODO: need to be changed if number of intermediate frames is changed.
-# t = np.linspace(0.125, 0.875, 7)
-
-# NSKT
-# num_snapshots = 10, dt = 5e-4
-T = 21
-t = np.linspace(0.0, (5e-4) * T, T)
+# Module-level time grid is intentionally left unconfigured until the caller
+# provides the active dataset via configure_time_grid(...).
+T = 0
+t = np.empty(0, dtype=np.float32)
 
 def getFlowCoeff (indices, device):
     """
@@ -334,6 +398,13 @@ def getFlowCoeff (indices, device):
     # Convert indices tensor to numpy array
     # ind = indices.detach().numpy()
     ind = indices.cpu().detach().numpy().astype(int)
+    max_index = int(ind.max()) if ind.size > 0 else 0
+    if max_index >= len(t):
+        raise IndexError(
+            f"Interpolation index {max_index} exceeds configured time grid length {len(t)}. "
+            "Call configure_time_grid(...) with the correct dataset/step count first."
+        )
+
     C11 = C00 = - (1 - (t[ind])) * (t[ind])
     C01 = (t[ind]) * (t[ind])
     C10 = (1 - (t[ind])) * (1 - (t[ind]))
@@ -371,6 +442,13 @@ def getWarpCoeff (indices, device):
     # Convert indices tensor to numpy array
     # ind = indices.detach().numpy()
     ind = indices.cpu().detach().numpy().astype(int)
+    max_index = int(ind.max()) if ind.size > 0 else 0
+    if max_index >= len(t):
+        raise IndexError(
+            f"Interpolation index {max_index} exceeds configured time grid length {len(t)}. "
+            "Call configure_time_grid(...) with the correct dataset/step count first."
+        )
+
     C0 = 1 - t[ind]
     C1 = t[ind]
     return torch.Tensor(C0)[None, None, None, :].permute(3, 0, 1, 2).to(device), torch.Tensor(C1)[None, None, None, :].permute(3, 0, 1, 2).to(device)

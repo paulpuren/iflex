@@ -1,42 +1,45 @@
-# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m4633
+#!/bin/bash
+set -euo pipefail
+
+# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m5262
+
+# Example:
+#   bash scripts/nskt/eval_flex_nskt.sh
+#   RE_ID=0 TOTAL_INTERP_STEPS=20 bash scripts/nskt/eval_flex_nskt.sh
+#   CHECKPOINT_PATH=./checkpoints/checkpoint_Model_FLEX_..._best.pt bash scripts/nskt/eval_flex_nskt.sh
 
 module load python
-conda activate /pscratch/sd/p/puren93/conda_env/genai
-cd ../../
+conda activate "${CONDA_ENV_PATH:-/pscratch/sd/k/kenzhong/conda_env/genai}"
+cd "$(dirname "$0")/../.."
 
-# # run nskt
-# python eval.py \
-#     --model FLEX \
-#     --data_name 'nskt' \
-#     --re_id 1 \
-#     --optimizer 'lion' \
-#     --epochs 300 \
-#     --batch_size 32 \
-#     --learning_rate 1e-5 \
-#     --total_interp_steps 10 \
-#     --trained_total_interp_steps 20 \
-#     --is_T_fixed False \
-#     --target_resolution 128 \
-#     --stride 64 \
-#     --scratch_dir '/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/'
+# select 12000, 24000, and 36000: 5, 7, 9 for eval OOD generalization
 
-PRETRAINED_CHECKPOINT="./checkpoints/checkpoint_Model_FLEX_small_mlp2_Data_nskt_Optim_adam_lr0.0001_epoch200_stride32_T20_TfixedFalse.pt"
+CONFIG_PATH="${CONFIG_PATH:-config/nskt/flex_posttrain.yaml}"
+RE_ID="${RE_ID:-9}"
+TEST_SEED="${TEST_SEED:-3407}"
+TOTAL_INTERP_STEPS="${TOTAL_INTERP_STEPS:-20}"
+BATCH_SIZE="${BATCH_SIZE:-12}"
+CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/checkpoint_Model_ft_FLEX3_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_T20_TfixedFalse_best.pt}"
+# CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/checkpoint_Model_ft_FLEX_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch150_patchsize256_stride32_T20_TfixedTrue_best.pt}"
+EXTRA_ARGS="${EXTRA_ARGS:-}"
 
-# run nskt
-python eval.py \
-    --model FLEX \
-    --data_name 'nskt' \
-    --re_id 0 \
-    --optimizer 'adam' \
-    --flex_model_size "small" \
-    --flex_mlp_ratio 2 \
-    --epochs 200 \
-    --batch_size 8 \
-    --learning_rate 1e-4 \
-    --total_interp_steps 16 \
-    --total_interp_steps_train 20 \
-    --is_T_fixed False \
-    --patch_size 256 \
-    --stride 32 \
-    --checkpoint_path $PRETRAINED_CHECKPOINT \
-    --scratch_dir '/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/'
+CMD=(
+  python eval.py
+  --config "${CONFIG_PATH}"
+  --re_id "${RE_ID}"
+  --test_seed "${TEST_SEED}"
+  --total_interp_steps "${TOTAL_INTERP_STEPS}"
+  --batch_size "${BATCH_SIZE}"
+)
+
+if [[ -n "${CHECKPOINT_PATH}" ]]; then
+  CMD+=(--checkpoint_path "${CHECKPOINT_PATH}")
+fi
+
+if [[ -n "${EXTRA_ARGS}" ]]; then
+  # shellcheck disable=SC2206
+  EXTRA_ARGS_ARR=(${EXTRA_ARGS})
+  CMD+=("${EXTRA_ARGS_ARR[@]}")
+fi
+
+"${CMD[@]}"

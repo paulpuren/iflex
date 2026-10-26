@@ -1,3 +1,5 @@
+from utils.config import parse_args_with_yaml
+import argparse
 import os, sys, time
 import numpy as np
 import wandb
@@ -5,6 +7,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
+import yaml
 from torch_ema import ExponentialMovingAverage
 from torch.utils.data import Dataset, DataLoader
 import torch.multiprocessing as mp
@@ -13,7 +16,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group, barrier, get_rank, is_initialized, all_reduce, get_world_size
 from diffusers.optimization import get_linear_schedule_with_warmup as scheduler
 from src.unet import UNet
-from src.flex import FLEX
 # import src.super_slomo as model
 import src.super_slomo as slomo_model
 
@@ -23,9 +25,141 @@ from datasets.data_shanghai import Shanghai
 from datasets.data_sea_temp import InputHandle
 from src.lion import Lion
 from src.plotting import plot_samples
+from src.utilities import get_run_name
 
 import warnings
 warnings.filterwarnings("ignore")
+
+
+def get_args_with_yaml():
+    return parse_args_with_yaml(build_parser())
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description = "FLEX for Temporal Interpolation"
+    )
+    # general parameters
+    parser.add_argument(
+        "--run_name",
+        type = str,
+        default = 'run1',
+        help = "Name of the current run."
+    )
+    parser.add_argument(
+        "--data_name",
+        type = str,
+        default = 'nskt',
+        help = "Name of the dataset."
+    )
+    parser.add_argument(
+        "--sampling_freq",
+        default = 10,
+        type = int,
+        help = "How often to save a snapshot"
+    )
+    # Training parameters
+    parser.add_argument(
+        "--optimizer",
+        type = str,
+        default = "adam",
+        help = "Optimizer: adam or lion"
+    )
+    parser.add_argument(
+        "--epochs",
+        default = 200,
+        type = int,
+        help = "Total epochs to train the model"
+    )
+    parser.add_argument(
+        "--batch_size",
+        default = 16,
+        type = int,
+        help = "Input batch size on each device (default: 32)"
+    )
+    parser.add_argument(
+        "--learning_rate",
+        default = 2e-4,
+        type = float,
+        help = 'learning rate'
+    )
+    parser.add_argument(
+        "--checkpoint_path",
+        default = "",
+        type = str,
+        help = "for reloading checkpoint and keep training"
+    )
+    # dataset parameters
+    parser.add_argument(
+        "--total_interp_steps_train",
+        default=1,
+        type=int,
+        help='total interpolation steps to condition on'
+    )
+    parser.add_argument(
+        "--is_T_fixed",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "fix or change T in training."
+    )
+    parser.add_argument(
+        "--patch_size",
+        default = 256,
+        type = int,
+        help = "Patch size for the datasets"
+    )
+    parser.add_argument(
+        "--stride",
+        default = 128,
+        type = int,
+        help = "Stride for the datasets"
+    )
+    parser.add_argument(
+        "--scratch_dir",
+        default = "/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/",
+        type = str,
+        help = "Directory for the dataset"
+    )
+    parser.add_argument(
+        "--condition_on_re",
+        default=False,
+        type=lambda x: (str(x).lower() == "true"),
+        help="Condition Super SloMo on a normalized Reynolds-number map.",
+    )
+    parser.add_argument(
+        "--reynolds_normalization_scale",
+        default=40000.0,
+        type=float,
+        help="Use Re / scale as the Super SloMo conditioning value.",
+    )
+    # Diffusion parameters
+    parser.add_argument(
+        "--prediction_type",
+        type = str,
+        default = 'v',
+        help = "Quantity to predict during training."
+    )
+    parser.add_argument(
+        "--sampler",
+        type = str,
+        default = 'ddim',
+        help = "Sampler to use to generate images"
+    )
+    # model parameters
+    parser.add_argument(
+        "--model",
+        type = str,
+        default = 'FLEX',
+        help = "model"
+    )
+    # U-Net parameters
+    parser.add_argument(
+        "--base_width",
+        type = int,
+        default = 128,
+        help = "Basewidth of U-Net"
+    )
+    return parser
 
 
 def ddp_setup(local_rank, world_size):
@@ -72,7 +206,9 @@ class Trainer:
             local_gpu_id: int,
             sampling_freq: int,
             run: wandb,
-            run_name: str
+            run_name: str,
+            condition_on_re: bool = False,
+            reynolds_normalization_scale: float = 40000.0,
         ) -> None:
 
         self.gpu_id = gpu_id
@@ -102,6 +238,18 @@ class Trainer:
 
         self.run = run
         self.run_name = run_name
+        self.condition_on_re = bool(condition_on_re)
+        self.reynolds_normalization_scale = float(reynolds_normalization_scale)
+
+    def _re_value(self, reynolds_number, reference):
+        if not self.condition_on_re:
+            return None
+        value = reynolds_number.to(reference.device, dtype=reference.dtype)
+        # Match FLEX exactly: its NSKT loader supplies Re / 40000, and the
+        # scalar conditioner takes log of that normalized value.
+        if torch.max(torch.abs(value)).item() > 2.0:
+            value = value / self.reynolds_normalization_scale
+        return value.reshape(-1, 1)
     
     # def _run_batch(
     #         self, 
@@ -154,7 +302,7 @@ class Trainer:
 
             # unpack the condition parameters
             target_interp_step, total_interp_steps, reynolds_number = cond_params
-            #reynolds_number = reynolds_number.to(self.local_gpu_id)
+            re_value = self._re_value(reynolds_number, I0)
             target_interp_step = target_interp_step.to(self.local_gpu_id)
             #total_interp_steps = total_interp_steps.to(self.local_gpu_id)
 
@@ -165,9 +313,7 @@ class Trainer:
             # --- START Super Slomo ---
             # Calculate flow between reference frames I0 and I1
             # c: 2 -> 4 (was 6 -> 4)
-            flowOut = self.flowComp(
-                torch.cat((I0, I1), dim=1)
-            )
+            flowOut = self.flowComp(torch.cat((I0, I1), dim=1), re_value)
 
             # Extracting flows between I0 and I1 - F_0_1 and F_1_0
             F_0_1 = flowOut[:,:2,:,:] # c = 2
@@ -198,10 +344,11 @@ class Trainer:
                         F_t_1, 
                         F_t_0, 
                         g_I1_F_t_1, 
-                        g_I0_F_t_0
+                        g_I0_F_t_0,
                     ), 
                     dim = 1
-                )
+                ),
+                re_value,
             )
 
             # Extract optical flow residuals and visibility maps
@@ -308,6 +455,7 @@ class Trainer:
             target_interp_step, total_interp_steps, reynolds_number = cond_params
             #reynolds_number = reynolds_number.to(self.local_gpu_id)
             target_interp_step = target_interp_step.to(self.local_gpu_id)
+            re_value = self._re_value(reynolds_number, I0)
             #total_interp_steps = total_interp_steps.to(self.local_gpu_id)
 
             trainFrameIndex = target_interp_step
@@ -315,9 +463,7 @@ class Trainer:
             # --- START Super Slomo ---
             # Calculate flow between reference frames I0 and I1
             # c: 2 -> 4 (was 6 -> 4)
-            flowOut = self.flowComp(
-                torch.cat((I0, I1), dim=1)
-            )
+            flowOut = self.flowComp(torch.cat((I0, I1), dim=1), re_value)
 
             # Extracting flows between I0 and I1 - F_0_1 and F_1_0
             F_0_1 = flowOut[:,:2,:,:] # c = 2
@@ -348,10 +494,11 @@ class Trainer:
                         F_t_1, 
                         F_t_0, 
                         g_I1_F_t_1, 
-                        g_I0_F_t_0
+                        g_I0_F_t_0,
                     ), 
                     dim = 1
-                )
+                ),
+                re_value,
             )
 
             # Extract optical flow residuals and visibility maps
@@ -381,16 +528,24 @@ class Trainer:
         checkpoint_dir = "./checkpoints"
         os.makedirs(checkpoint_dir, exist_ok=True)
 
-        save_path = "{}/checkpoint_{}.pt".format(
+        suffix = name or ""
+        save_path = "{}/checkpoint_{}{}.pt".format(
             checkpoint_dir,
-            self.run_name
+            self.run_name,
+            suffix,
         )
         save_dict = {
             # 'model': self.model.module.state_dict(),
             'flowComp': self.flowComp.module.state_dict(),
             'ArbTimeFlowIntrp': self.ArbTimeFlowIntrp.module.state_dict(),
             # 'ema': self.model.module.ema.state_dict(),
-            'optimizer': self.optimizer.state_dict()
+            'optimizer': self.optimizer.state_dict(),
+            'epoch': epoch,
+            'conditioning': {
+                'condition_on_re': self.condition_on_re,
+                'reynolds_normalization_scale': self.reynolds_normalization_scale,
+                'method': 'flex_normalized_log_fourier_bottleneck_film_v2',
+            },
         }
         torch.save(save_dict, save_path)
         
@@ -454,9 +609,9 @@ def load_checkpoint(
         device
     ):
     if not os.path.exists(save_path):
-        print(f"Unable to load from {save_path}")
+        raise FileNotFoundError(f"Checkpoint not found: {save_path}")
 
-    checkpoint = torch.load(save_path, weights_only=True)
+    checkpoint = torch.load(save_path, weights_only=True, map_location="cpu")
     flowComp.load_state_dict(checkpoint["flowComp"]) 
     ArbTimeFlowIntrp.load_state_dict(checkpoint["ArbTimeFlowIntrp"]) 
     # model.load_state_dict(checkpoint["model"])
@@ -509,12 +664,12 @@ def load_train_objs(args, device):
         # Initialize flow computation and arbitrary-time flow interpolation CNNs
         # original is (6, 4) 6 = 3 * 2 due to RGB input
         # for my case, 1 * 2 = 2 due to grayscale input
-        flowComp = slomo_model.UNet(2, 4) 
+        flowComp = slomo_model.UNet(2, 4, condition_on_re=args.condition_on_re)
         # flowComp.to(device) to device in main training loop
 
         # orginally (20, 5) due to RGB input
         # for my case, (1+2) * 4 = 12, 2 + 2 + 1 = 5
-        ArbTimeFlowIntrp = slomo_model.UNet(12, 5) 
+        ArbTimeFlowIntrp = slomo_model.UNet(12, 5, condition_on_re=args.condition_on_re)
         # ArbTimeFlowIntrp.to(device)
 
         # Initialze backward warpers for train and validation datasets
@@ -580,6 +735,7 @@ def main(
     
     device = torch.cuda.current_device()
     print("device: ", device)
+    slomo_model.configure_time_grid(args.data_name, args.total_interp_steps_train)
     
     dataset, flowComp, ArbTimeFlowIntrp, trainFlowBackWarp, optimizer, _ = load_train_objs(
         args = args, 
@@ -641,7 +797,9 @@ def main(
         local_gpu_id = local_rank, 
         sampling_freq = sampling_freq, 
         run = run, 
-        run_name = args.run_name
+        run_name = args.run_name,
+        condition_on_re = args.condition_on_re,
+        reynolds_normalization_scale = args.reynolds_normalization_scale,
     )
     trainer.train(epochs, L1_lossFn, MSE_LossFn)
     end = time.time()
@@ -649,135 +807,14 @@ def main(
     destroy_process_group()
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(
-        description = "FLEX for Temporal Interpolation"
-    )
-    # general parameters
-    parser.add_argument(
-        "--run_name", 
-        type = str, 
-        default = 'run1', 
-        help = "Name of the current run."
-    )
-    parser.add_argument(
-        "--data_name", 
-        type = str, 
-        default = 'nskt', 
-        help = "Name of the dataset."
-    )
-    parser.add_argument(
-        "--sampling_freq", 
-        default = 10, 
-        type = int, 
-        help = "How often to save a snapshot"
-    )
-    # Training parameters
-    parser.add_argument(
-        "--optimizer", 
-        type = str, 
-        default = "adam", 
-        help = "Optimizer: adam or lion"
-    )
-    parser.add_argument(
-        "--epochs", 
-        default = 200, 
-        type = int, 
-        help = "Total epochs to train the model"
-    )
-    parser.add_argument(
-        "--batch_size", 
-        default = 16, 
-        type = int, 
-        help = "Input batch size on each device (default: 32)"
-    )
-    parser.add_argument(
-        "--learning_rate", 
-        default = 2e-4, 
-        type = float, 
-        help = 'learning rate'
-    )
-    parser.add_argument(
-        "--checkpoint_path", 
-        default = "", 
-        type = str, 
-        help = "for reloading checkpoint and keep training"
-    )
-    # dataset parameters
-    parser.add_argument(
-        "--total_interp_steps_train", 
-        default=1, 
-        type=int, 
-        help='total interpolation steps to condition on'
-    )
-    parser.add_argument(
-        "--is_T_fixed", 
-        default = True,
-        type = lambda x: (str(x).lower() == 'true'), 
-        help = "fix or change T in training."
-    )
-    parser.add_argument(
-        "--patch_size", 
-        default = 256, 
-        type = int, 
-        help = "Patch size for the datasets"
-    )
-    parser.add_argument(
-        "--stride", 
-        default = 128, 
-        type = int, 
-        help = "Stride for the datasets"
-    )
-    parser.add_argument(
-        "--scratch_dir",
-        default = "/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/", 
-        type = str, 
-        help = "Directory for the dataset"
-    )
-    # Diffusion parameters
-    parser.add_argument(
-        "--prediction_type", 
-        type = str, 
-        default = 'v', 
-        help = "Quantity to predict during training."
-    )
-    parser.add_argument(
-        "--sampler", 
-        type = str, 
-        default = 'ddim', 
-        help = "Sampler to use to generate images"
-    )    
-    # model parameters
-    parser.add_argument(
-        "--model", 
-        type = str, 
-        default = 'FLEX', 
-        help = "model"
-    )    
-    # U-Net parameters
-    parser.add_argument(
-        "--base_width", 
-        type = int, 
-        default = 128, 
-        help = "Basewidth of U-Net"
-    )    
-    args = parser.parse_args()
+    args = get_args_with_yaml()
 
     # Launch processes.
     print('Launching processes...')
     
     # wandb.login()
-    wandb.login(key = "5282eaefee2cb8f881265effb6251abf1703deee")
-    args.run_name = "Model_{}_Data_{}_Optim_{}_lr{}_epoch{}_stride{}_T{}_Tfixed{}".format(
-            args.model,
-            args.data_name,
-            args.optimizer,
-            args.learning_rate,
-            args.epochs,
-            args.stride,
-            args.total_interp_steps_train,
-            args.is_T_fixed
-    )
+    wandb.login()
+    args.run_name = get_run_name(args)
     run = wandb.init(
         # Set the project where this run will be logged
         project = "InterpDM",
@@ -792,6 +829,8 @@ if __name__ == "__main__":
     )
 
     world_size = torch.cuda.device_count()
+    if world_size == 0:
+        raise RuntimeError("Training requires at least one visible CUDA GPU.")
     print("world size: ", world_size)
     
     if world_size == 1:
@@ -817,4 +856,3 @@ if __name__ == "__main__":
             ), 
             nprocs = world_size
         )
-

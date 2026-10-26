@@ -314,4 +314,4 @@ def plot_reduced_spectrum(
     plt.tight_layout()
     plt.show()
     
-    
+

@@ -203,7 +203,8 @@ class NSKT_eval(Dataset):
             stride = 128,
             num_interp_steps = 1,
             re_id = -1,
-            scratch_dir = './'
+            scratch_dir = './',
+            seed = '3407'
         ):
         """
         Load and preprocess the dataset for evaluation.
@@ -229,7 +230,7 @@ class NSKT_eval(Dataset):
         self.scratch_dir = scratch_dir
 
         # get the data path
-        self.seed = '3407'
+        self.seed = str(seed)
         self.re_list = RE_EVAL_LIST
         self.paths = self.build_file_list()
 

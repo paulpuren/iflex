@@ -1,0 +1,29 @@
+# Resume the 300-epoch FLEXDirect run for 150 additional epochs.
+# train.py treats `epochs` as the final epoch, hence 300 + 150 = 450.
+run_name: FLEX_direct_nskt_posttrain
+data_name: nskt
+model: FLEXDirect
+flex_model_size: small
+flex_mlp_ratio: 2
+use_scalar_film: true
+use_spatial_cond: true
+spatial_cond_scales: [32, 16]
+spatial_cond_mode: gated
+ddp_find_unused_parameters: true
+sampling_freq: 10
+validation_freq: 5
+optimizer: adam
+epochs: 150
+batch_size: 12
+learning_rate: 1.0e-4
+checkpoint_path: checkpoints/checkpoint_Model_FLEXDirect_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_T20_TfixedFalse_last.pt
+resume_training: true
+total_interp_steps_train: 20
+is_T_fixed: false
+patch_size: 256
+stride: 32
+scratch_dir: /global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/
+prediction_type: v
+sampler: ddim
+time_steps: 3
+base_width: 128

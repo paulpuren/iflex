@@ -1,5 +1,5 @@
 import argparse
-def get_args():
+def build_parser():
     parser = argparse.ArgumentParser(
         description = "FLEX for Temporal Interpolation"
     )
@@ -21,6 +21,12 @@ def get_args():
         default = 10, 
         type = int, 
         help = "How often to save a snapshot"
+    )
+    parser.add_argument(
+        "--validation_freq",
+        default = 1,
+        type = int,
+        help = "How often to run validation, in epochs"
     )
     # Training parameters
     parser.add_argument(
@@ -48,10 +54,40 @@ def get_args():
         help = 'learning rate'
     ) # 1e-4 for adam; 1e-5 for lion
     parser.add_argument(
+        "--num_workers",
+        default = 16,
+        type = int,
+        help = "Number of DataLoader workers per rank"
+    )
+    parser.add_argument(
+        "--prefetch_factor",
+        default = 4,
+        type = int,
+        help = "Number of prefetched batches per worker when num_workers > 0"
+    )
+    parser.add_argument(
+        "--persistent_workers",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Keep DataLoader workers alive across epochs"
+    )
+    parser.add_argument(
+        "--ddp_find_unused_parameters",
+        default = False,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Enable DDP unused-parameter detection for models with conditional branches"
+    )
+    parser.add_argument(
         "--checkpoint_path", 
         default = "", 
         type = str, 
         help = "for reloading checkpoint and keep training"
+    )
+    parser.add_argument(
+        "--resume_training",
+        default = False,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Resume optimizer state and epoch count from checkpoint_path."
     )
     # dataset parameters
     parser.add_argument(
@@ -71,6 +107,12 @@ def get_args():
         default = 256, 
         type = int, 
         help = "Patch size for the datasets"
+    )
+    parser.add_argument(
+        "--crop_size",
+        default = None,
+        type = int,
+        help = "Crop size for the raw dataset before optional downsampling to patch_size"
     )
     parser.add_argument(
         "--stride", 
@@ -102,13 +144,19 @@ def get_args():
         type = int, 
         default = 10, 
         help = "Diffusion time steps for sampling"
-    )    
+    )
+    parser.add_argument(
+        "--cond_drop_prob",
+        type=int,
+        default=0,
+        help="Percent probability [0-100] of dropping conditioning during training.",
+    )
     # model parameters
     parser.add_argument(
         "--model", 
         type = str, 
         default = 'FLEX', 
-        help = "model"
+        help = "model: FLEX, FLEXResidual, FLEXResidualZero, CrossFLEX, UNet, or SuperSloMo"
     )    
     parser.add_argument(
         "--flex_model_size", 
@@ -122,6 +170,49 @@ def get_args():
         default = 2, 
         help = "mlp ratios: 2 or 4"
     )   
+    parser.add_argument(
+        "--use_scalar_film",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Apply scalar FiLM conditioning from tau, dt, and Re in FLEX."
+    )
+    parser.add_argument(
+        "--use_spatial_cond",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Inject shared spatial endpoint conditioning in FLEX."
+    )
+    parser.add_argument(
+        "--spatial_cond_scales",
+        nargs = "+",
+        type = int,
+        default = [32, 16],
+        help = "Spatial resolutions where FLEX injects endpoint condition maps."
+    )
+    parser.add_argument(
+        "--spatial_cond_mode",
+        type = str,
+        default = "gated",
+        help = "Spatial conditioning mode for FLEX: gated or additive."
+    )
+    parser.add_argument(
+        "--spatial_fusion_features",
+        choices = ["endpoints", "endpoints_mean_diff"],
+        default = "endpoints_mean_diff",
+        help = "Endpoint features fused at Eq. (11); use 'endpoints' for the no-mean/no-difference ablation."
+    )
+    parser.add_argument(
+        "--condition_on_re",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Use Reynolds number conditioning. Set false for no-Re ablations."
+    )
+    parser.add_argument(
+        "--condition_on_total_interp_steps",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Use total interpolation steps conditioning. Set false for no-total-steps ablations."
+    )
     # U-Net parameters
     parser.add_argument(
         "--base_width", 
@@ -129,4 +220,8 @@ def get_args():
         default = 128, 
         help = "Basewidth of U-Net"
     )    
-    return parser.parse_args()
+    return parser
+
+
+def get_args():
+    return build_parser().parse_args()

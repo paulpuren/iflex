@@ -1,4 +1,4 @@
-# Core training dependencies for train_flex_unet.py (FLEX + UNet)
+# Core training dependencies
 numpy
 torch
 torchvision
@@ -12,8 +12,13 @@ torch-ema
 einops
 pyyaml
 
-# Optional but commonly used in this repo (eval/analysis scripts)
+# Evaluation and analysis dependencies (some imported by shared utilities)
 scipy
 seaborn
 tqdm
 lpips
+
+# Direct imports in preprocessing, archive utilities, and analysis
+Pillow
+py7zr
+cmweather

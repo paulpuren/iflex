@@ -9,9 +9,6 @@ Evaluation for Shanghai radar data
 import os, time
 import torch
 import numpy as np
-# from src.unet import UNet
-from src.flex import FLEX
-from src.diffusion_model import DiffusionModel
 from src.helper import *
 from torch.utils.data import Dataset, DataLoader
 from torch_ema import ExponentialMovingAverage
@@ -21,7 +18,7 @@ import torch.nn as nn
 from torchvision import transforms 
 import cv2
 from utils.params_eval import get_args
-from utilities import *
+from src.utilities import *
 
 PIXEL_SCALE = 90.0
 

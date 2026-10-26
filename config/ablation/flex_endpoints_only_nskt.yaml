@@ -1,0 +1,29 @@
+# Eq. (11) ablation: fuse only [f0^l, f1^l], omitting mean and difference.
+run_name: FLEX_endpoints_only_nskt
+data_name: nskt
+model: FLEX
+flex_model_size: small
+flex_mlp_ratio: 2
+use_scalar_film: true
+use_spatial_cond: true
+spatial_cond_scales: [32, 16]
+spatial_cond_mode: gated
+spatial_fusion_features: endpoints
+ddp_find_unused_parameters: true
+sampling_freq: 10
+validation_freq: 5
+optimizer: adam
+epochs: 150
+batch_size: 12
+learning_rate: 1.0e-4
+checkpoint_path: checkpoints/checkpoint_Model_FLEX_endpointsOnly_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_T20_TfixedFalse_last.pt
+resume_training: true
+total_interp_steps_train: 20
+is_T_fixed: false # true
+patch_size: 256
+stride: 32
+scratch_dir: /global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/
+prediction_type: v
+sampler: ddim
+time_steps: 3
+base_width: 128

@@ -1,0 +1,28 @@
+# Direct-u_tau control for the interpolation-and-refinement ablation.
+# All settings match config/nskt/flex.yaml; only the generated diffusion target
+# changes from u_tau - linear_interp(u_0, u_1) to u_tau.
+run_name: FLEX_direct_nskt
+data_name: nskt
+model: FLEXDirect
+flex_model_size: small
+flex_mlp_ratio: 2
+use_scalar_film: true
+use_spatial_cond: true
+spatial_cond_scales: [32, 16]
+spatial_cond_mode: gated
+ddp_find_unused_parameters: true
+sampling_freq: 10
+optimizer: adam
+epochs: 300
+batch_size: 12
+learning_rate: 1.0e-4
+checkpoint_path: ''
+total_interp_steps_train: 20
+is_T_fixed: false # true
+patch_size: 256
+stride: 32
+scratch_dir: /global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/
+prediction_type: v
+sampler: ddim
+time_steps: 3
+base_width: 128

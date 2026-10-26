@@ -1,7 +1,7 @@
 import argparse
 from html import parser
 
-def get_args():
+def build_parser():
     parser = argparse.ArgumentParser(
         description = 'Minimalistic Diffusion Model for Super-resolution'
     )
@@ -10,7 +10,7 @@ def get_args():
         "--model", 
         type = str, 
         default = 'FLEX', 
-        help = "model"
+        help = "model: FLEX, FLEXResidual, FLEXResidualZero, CrossFLEX, UNet, or SuperSloMo"
     ) 
     parser.add_argument(
         "--flex_model_size", 
@@ -24,6 +24,55 @@ def get_args():
         default = 2, 
         help = "mlp ratios: 2 or 4"
     )   
+    parser.add_argument(
+        "--use_scalar_film",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Apply scalar FiLM conditioning from tau, dt, and Re in FLEX."
+    )
+    parser.add_argument(
+        "--use_spatial_cond",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Inject shared spatial endpoint conditioning in FLEX."
+    )
+    parser.add_argument(
+        "--spatial_cond_scales",
+        nargs = "+",
+        type = int,
+        default = [32, 16],
+        help = "Spatial resolutions where FLEX injects endpoint condition maps."
+    )
+    parser.add_argument(
+        "--spatial_cond_mode",
+        type = str,
+        default = "gated",
+        help = "Spatial conditioning mode for FLEX: gated or additive."
+    )
+    parser.add_argument(
+        "--spatial_fusion_features",
+        choices = ["endpoints", "endpoints_mean_diff"],
+        default = "endpoints_mean_diff",
+        help = "Endpoint features fused at Eq. (11)."
+    )
+    parser.add_argument(
+        "--condition_on_re",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Use Reynolds number conditioning. Set false for no-Re ablations."
+    )
+    parser.add_argument(
+        "--reynolds_normalization_scale",
+        default = 40000.0,
+        type = float,
+        help = "Scale applied to Reynolds-number conditioning (Re / scale)."
+    )
+    parser.add_argument(
+        "--condition_on_total_interp_steps",
+        default = True,
+        type = lambda x: (str(x).lower() == 'true'),
+        help = "Use total interpolation steps conditioning. Set false for no-total-steps ablations."
+    )
     parser.add_argument(
         "--data_name", 
         type = str, 
@@ -53,6 +102,12 @@ def get_args():
         help = 'target resolution'
     )
     parser.add_argument(
+        '--crop_size',
+        default = None,
+        type = int,
+        help = 'crop size before optional downsampling to patch_size'
+    )
+    parser.add_argument(
         "--prediction_type", 
         type = str, 
         default = 'v',
@@ -69,6 +124,12 @@ def get_args():
         type = int, 
         default = 10,
         help = "Time steps for sampling"
+    )
+    parser.add_argument(
+        "--cond_drop_prob",
+        type=int,
+        default=0,
+        help="Percent probability [0-100] of dropping conditioning during training.",
     )
     parser.add_argument(
         '--total_interp_steps', 
@@ -93,6 +154,10 @@ def get_args():
         default = '/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/', 
         type = str, 
         help = 'Directory for the dataset'
+    )
+    parser.add_argument(
+        '--test_seed', default='3407', type=str,
+        help='Independent NSKT trajectory seed used for evaluation.'
     )
     parser.add_argument(
         "--optimizer", 
@@ -130,4 +195,8 @@ def get_args():
         type = str, 
         help = "for reloading checkpoint and keep training"
     )
-    return parser.parse_args()
+    return parser
+
+
+def get_args():
+    return build_parser().parse_args()

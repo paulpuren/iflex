@@ -14,6 +14,23 @@ conda activate /pscratch/sd/p/puren93/conda_env/genai
 # Run from repository root (script lives in scripts/sst/)
 cd "$(dirname "$0")/../.."
 
+USE_MULTI_GPU="${USE_MULTI_GPU:-true}"
+if [[ "${USE_MULTI_GPU}" == "true" || "${USE_MULTI_GPU}" == "1" ]]; then
+  if [[ -n "${CUDA_VISIBLE_DEVICES:-}" && -n "${SLURM_GPUS_ON_NODE:-}" && "${SLURM_GPUS_ON_NODE}" =~ ^[0-9]+$ ]]; then
+    IFS=',' read -r -a VISIBLE_GPU_ARRAY <<< "${CUDA_VISIBLE_DEVICES}"
+    if (( ${#VISIBLE_GPU_ARRAY[@]} > SLURM_GPUS_ON_NODE )); then
+      CUDA_VISIBLE_DEVICES="$(IFS=','; echo "${VISIBLE_GPU_ARRAY[*]:0:${SLURM_GPUS_ON_NODE}}")"
+      echo "Truncated CUDA_VISIBLE_DEVICES to Slurm allocation: ${CUDA_VISIBLE_DEVICES}" >&2
+      export CUDA_VISIBLE_DEVICES
+    fi
+  fi
+elif [[ "${CUDA_VISIBLE_DEVICES:-}" == *,* ]]; then
+  FIRST_VISIBLE_GPU="${CUDA_VISIBLE_DEVICES%%,*}"
+  echo "Using a single GPU for eval: CUDA_VISIBLE_DEVICES=${FIRST_VISIBLE_GPU}" >&2
+  export CUDA_VISIBLE_DEVICES="${FIRST_VISIBLE_GPU}"
+fi
+export USE_MULTI_GPU
+
 # ---- checkpoint/run-name-matching args (must match training config) ----
 # Matches:
 # checkpoints/checkpoint_Model_UNet_Data_sea_temp_Optim_adam_lr0.0001_epoch30_stride64_T10_TfixedFalse.pt

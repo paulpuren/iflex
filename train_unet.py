@@ -1,20 +1,26 @@
+from utils.config import parse_args_with_yaml
+import argparse
 import os, sys, time
 import numpy as np
 import wandb
 import torch
+import yaml
 from torch.utils.data import DataLoader
 import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group, get_rank
 from diffusers.optimization import get_linear_schedule_with_warmup as scheduler
-from src.diffusion_model import DiffusionModel
 from src.plotting import plot_samples
-from utils.params import get_args
-from utilities import *
+from utils.params import build_parser
+from src.utilities import *
 
 import warnings
 warnings.filterwarnings("ignore")
+
+
+def get_args_with_yaml():
+    return parse_args_with_yaml(build_parser())
 
 
 def ddp_setup(local_rank, world_size):
@@ -98,13 +104,14 @@ class Trainer:
         )
         
         loss.backward()
-        if isinstance(self.model.module, DiffusionModel):
+        if hasattr(self.model.module, "ema"):
             torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.)
         self.optimizer.step()
         self.lr_scheduler.step()
         return loss.item()
 
-    def _run_epoch(self, epoch):        
+    def _run_epoch(self, epoch):
+        self.model.train()
         self.train_loader.sampler.set_epoch(epoch)
         loss_values_task = []
         for inputs, targets, cond_params in self.train_loader:
@@ -277,9 +284,9 @@ def load_checkpoint_unet(
         device
     ):
     if not os.path.exists(save_path):
-        print(f"Unable to load from {save_path}")
+        raise FileNotFoundError(f"Checkpoint not found: {save_path}")
 
-    checkpoint = torch.load(save_path, weights_only=True)
+    checkpoint = torch.load(save_path, weights_only=True, map_location="cpu")
     model.load_state_dict(checkpoint["model"])
     optimizer.load_state_dict(checkpoint['optimizer'])
 
@@ -349,13 +356,13 @@ def main(
     destroy_process_group()
 
 if __name__ == "__main__":
-    args = get_args()
+    args = get_args_with_yaml()
 
     # Launch processes.
     print('Launching processes...')
     
     # wandb.login()
-    wandb.login(key = "5282eaefee2cb8f881265effb6251abf1703deee")
+    wandb.login()
     args.run_name = get_run_name(args)
     run = wandb.init(
         # Set the project where this run will be logged
@@ -371,6 +378,8 @@ if __name__ == "__main__":
     )
 
     world_size = torch.cuda.device_count()
+    if world_size == 0:
+        raise RuntimeError("Training requires at least one visible CUDA GPU.")
     print("world size: ", world_size)
     
     if world_size == 1:
@@ -396,4 +405,3 @@ if __name__ == "__main__":
             ), 
             nprocs = world_size
         )
-

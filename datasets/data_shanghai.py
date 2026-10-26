@@ -9,7 +9,6 @@ import h5py
 import numpy as np
 from torch.utils.data import Dataset
 from torchvision import transforms 
-from matplotlib import colors
 
 PIXEL_SCALE = 90.0
 
@@ -50,6 +49,7 @@ class Shanghai(Dataset):
             type = 'train', 
             trans = None, 
             total_interp_steps = 20,
+            is_T_fixed = False,
             seq_len = -1
         ):
         super().__init__()
@@ -57,6 +57,7 @@ class Shanghai(Dataset):
         self.data_path = data_path
         self.img_size = img_size
         self.total_interp_steps = total_interp_steps
+        self.is_T_fixed = is_T_fixed
 
         assert type in ['train', 'test', 'val']
         self.type = type if type!='val' else 'test'
@@ -96,10 +97,14 @@ class Shanghai(Dataset):
         # --- MODIFIED BY PU REN ---
         # define a random total pred steps
         # total_interp_steps = np.random.randint(5, 20)
-        total_interp_steps = np.random.randint(
-            self.total_interp_steps // 4, 
-            self.total_interp_steps
-        )
+        if self.is_T_fixed:
+            total_interp_steps = self.total_interp_steps
+        else:
+            min_steps = max(1, self.total_interp_steps // 4)
+            total_interp_steps = np.random.randint(
+                min_steps,
+                self.total_interp_steps + 1,
+            )
 
         # define a random time index for the target within the range of predicted steps
         target_interp_step = np.random.randint(0, total_interp_steps) + 1
@@ -122,6 +127,7 @@ class Shanghai(Dataset):
     
 
 def gray2color(image, **kwargs):
+    from matplotlib import colors
 
     # define the color mapping and boundaries
     cmap = colors.ListedColormap(COLOR_MAP)
