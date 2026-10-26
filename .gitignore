@@ -212,7 +212,6 @@ __marimo__/
 /checkpoints/
 /samples/
 /wandb/
-/assets/
 *.pt
 *.pth
 *.ckpt
