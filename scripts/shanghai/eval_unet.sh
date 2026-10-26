@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m5262
-
 # Example:
 #   bash scripts/shanghai/eval_unet_shanghai.sh
 #   CUDA_VISIBLE_DEVICES=0 bash scripts/shanghai/eval_unet_shanghai.sh
 #   TOTAL_INTERP_STEPS_EVAL=20 BATCH_SIZE=8 bash scripts/shanghai/eval_unet_shanghai.sh
 
-module load python
-conda activate /pscratch/sd/p/puren93/conda_env/genai
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 
 # Run from repository root (script lives in scripts/shanghai/)
 cd "$(dirname "$0")/../.."
@@ -22,8 +23,6 @@ else
 fi
 
 # ---- checkpoint/run-name-matching args (must match training config) ----
-# Default checkpoint target:
-# checkpoints/checkpoint_Model_UNet_Data_shanghai_Optim_lion_lr1e-05_epoch100_stride64_T20_TfixedFalse.pt
 MODEL="${MODEL:-UNet}"
 DATA_NAME="${DATA_NAME:-shanghai}"
 OPTIMIZER="${OPTIMIZER:-adam}"
@@ -39,7 +38,7 @@ PATCH_SIZE="${PATCH_SIZE:-128}"
 TIME_STEPS="${TIME_STEPS:-10}"
 PREDICTION_TYPE="${PREDICTION_TYPE:-v}"
 TOTAL_INTERP_STEPS_EVAL="${TOTAL_INTERP_STEPS_EVAL:-8}"
-SCRATCH_DIR="${SCRATCH_DIR:-/global/cfs/cdirs/m4633/puren/interp_dm/shanghai/shanghai.h5}"
+SCRATCH_DIR="${SCRATCH_DIR:-data/shanghai/shanghai.h5}"
 
 python "${EVAL_SCRIPT}" \
   --model "${MODEL}" \

@@ -29,7 +29,7 @@ def get_train_args():
     parser.add_argument(
         "--scratch_dir",
         type=str,
-        default="/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/",
+        default="data/nskt/",
     )
     parser.add_argument("--prediction_type", type=str, default="v")
     parser.add_argument("--sampler", type=str, default="ddim")
@@ -86,7 +86,7 @@ def get_eval_args():
     parser.add_argument(
         "--scratch_dir",
         type=str,
-        default="/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/",
+        default="data/nskt/",
     )
     parser.add_argument("--optimizer", type=str, default="adam")
     parser.add_argument("--epochs", type=int, default=300)

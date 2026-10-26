@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-module load python
-conda activate "${CONDA_ENV_PATH:-/pscratch/sd/p/puren93/conda_env/eden}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 
-cd "$(dirname "$0")/../../EDEN"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "${REPO_ROOT}/EDEN"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
 CONFIG_PATH="${CONFIG_PATH:-configs/train_dit_sst.yaml}"
-PRETRAINED_VAE_PATH="${PRETRAINED_VAE_PATH:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_VAE/012/checkpoints/0012000.pt}"
-RESUME_FROM_CKPT="${RESUME_FROM_CKPT:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_DiT/012/checkpoints/0012000.pt}"
-DATA_PATH="${DATA_PATH:-/global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/}"
+PRETRAINED_VAE_PATH="${PRETRAINED_VAE_PATH:-${REPO_ROOT}/checkpoints/sst/eden_vae.pt}"
+RESUME_FROM_CKPT="${RESUME_FROM_CKPT:-${REPO_ROOT}/checkpoints/sst/eden_dit.pt}"
+DATA_PATH="${DATA_PATH:-${REPO_ROOT}/data/sst/}"
 EPOCHS="${EPOCHS:-100}"
 
 if [[ ! -f "${CONFIG_PATH}" ]]; then
@@ -25,7 +29,7 @@ fi
 
 if [[ -z "${RESUME_FROM_CKPT}" ]]; then
   echo "Set RESUME_FROM_CKPT to the EDEN DiT checkpoint you want to continue from." >&2
-  echo "Example: RESUME_FROM_CKPT=/path/to/checkpoints/0012000.pt $0" >&2
+  echo "Example: RESUME_FROM_CKPT=/path/to/checkpoints/eden_dit.pt $0" >&2
   exit 1
 fi
 

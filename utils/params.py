@@ -122,7 +122,7 @@ def build_parser():
     )
     parser.add_argument(
         "--scratch_dir",
-        default = "/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/", 
+        default = "data/nskt/",
         type = str, 
         help = "Directory for the dataset"
     )

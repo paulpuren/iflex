@@ -1,8 +1,7 @@
 import py7zr
 
-data_path = "/global/cfs/cdirs/m4633/puren/interp_dm/"
+data_path = "data/"
 # dataset = Shanghai(data_path + '/shanghai_radar', 128)'
-# /pscratch/sd/p/puren93/puren/Interp-DM
 
 # sea-temperature.zip
 

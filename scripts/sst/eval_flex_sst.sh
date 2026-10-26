@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m5262
-
 # Example:
 #   bash scripts/sst/eval_flex_sst.sh
 #   TOTAL_INTERP_STEPS_EVAL=10 BATCH_SIZE=12 bash scripts/sst/eval_flex_sst.sh
-#   CHECKPOINT_PATH=./checkpoints/checkpoint_Model_ft_FLEX_..._best.pt bash scripts/sst/eval_flex_sst.sh
 
-module load python
-conda activate /pscratch/sd/p/puren93/conda_env/genai
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 cd "$(dirname "$0")/../.."
 
 USE_MULTI_GPU="${USE_MULTI_GPU:-true}"
@@ -48,8 +48,8 @@ PATCH_SIZE="${PATCH_SIZE:-128}"
 TIME_STEPS="${TIME_STEPS:-3}"
 PREDICTION_TYPE="${PREDICTION_TYPE:-v}"
 TOTAL_INTERP_STEPS_EVAL="${TOTAL_INTERP_STEPS_EVAL:-10}"
-SCRATCH_DIR="${SCRATCH_DIR:-/global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/}"
-CHECKPOINT_PATH="${CHECKPOINT_PATH:-/pscratch/sd/p/puren93/puren/Interp-DM/checkpoints/checkpoint_Model_ft_FLEX3_small_mlp2_Data_sea_temp_Optim_adam_cosine_lr0.0001_epoch100_patchsize128_stride32_T10_TfixedFalse_best.pt}"
+SCRATCH_DIR="${SCRATCH_DIR:-data/sst/}"
+CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/sst/flex3_best.pt}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 CMD=(

@@ -5,9 +5,6 @@
 # instead of all u/v/w snapshots (~71 GiB each). Override PACK_MAX_FRAMES if
 # the evaluation indexing protocol changes.
 #SBATCH --job-name=nskt-heldout
-#SBATCH --account=m4633
-#SBATCH --constraint=cpu
-#SBATCH --qos=regular
 # Run one at a time by default: the solver may still create its full raw result
 # in temporary storage before the compact HDF5 is packed and the raw data removed.
 #SBATCH --array=0-29%1

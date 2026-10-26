@@ -1,15 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m5262
-
 # Example:
 #   bash scripts/nskt/eval_flex_nskt.sh
 #   RE_ID=0 TOTAL_INTERP_STEPS=20 bash scripts/nskt/eval_flex_nskt.sh
-#   CHECKPOINT_PATH=./checkpoints/checkpoint_Model_FLEX_..._best.pt bash scripts/nskt/eval_flex_nskt.sh
 
-module load python
-conda activate "${CONDA_ENV_PATH:-/pscratch/sd/k/kenzhong/conda_env/genai}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 cd "$(dirname "$0")/../.."
 
 # select 12000, 24000, and 36000: 5, 7, 9 for eval OOD generalization
@@ -19,8 +19,7 @@ RE_ID="${RE_ID:-9}"
 TEST_SEED="${TEST_SEED:-3407}"
 TOTAL_INTERP_STEPS="${TOTAL_INTERP_STEPS:-20}"
 BATCH_SIZE="${BATCH_SIZE:-12}"
-CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/checkpoint_Model_ft_FLEX3_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_T20_TfixedFalse_best.pt}"
-# CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/checkpoint_Model_ft_FLEX_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch150_patchsize256_stride32_T20_TfixedTrue_best.pt}"
+CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/nskt/flex3_best.pt}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 CMD=(

@@ -22,7 +22,7 @@ total_interp_steps_train: 20
 is_T_fixed: false
 patch_size: 256
 stride: 32
-scratch_dir: /global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/
+scratch_dir: data/nskt/
 prediction_type: v
 sampler: ddim
 time_steps: 3

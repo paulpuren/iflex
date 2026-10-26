@@ -24,13 +24,13 @@ optimizer: adam
 epochs: 150 # 300
 batch_size: 12
 learning_rate: 1.0e-4
-checkpoint_path: checkpoints/checkpoint_Model_ft_FLEX_noT_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_T20_TfixedFalse_best.pt
+checkpoint_path: checkpoints/nskt/flex_not_best.pt
 resume_training: true
 total_interp_steps_train: 20
 is_T_fixed: false
 patch_size: 256
 stride: 32
-scratch_dir: /global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/
+scratch_dir: data/nskt/
 prediction_type: v
 sampler: ddim
 time_steps: 3

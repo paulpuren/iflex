@@ -10,5 +10,5 @@ learning_rate: 1.0e-4
 total_interp_steps: 10
 total_interp_steps_train: 10
 is_T_fixed: true
-scratch_dir: /global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/
+scratch_dir: data/sst/
 checkpoint_path: ''

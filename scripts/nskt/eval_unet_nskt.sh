@@ -1,10 +1,14 @@
-# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m4633
+#!/usr/bin/env bash
+set -euo pipefail
 
-module load python
-conda activate /pscratch/sd/p/puren93/conda_env/genai
-cd ../../
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
+cd "$(dirname "$0")/../.."
 
-PRETRAINED_CHECKPOINT="./checkpoints/checkpoint_Model_UNet_Data_nskt_Optim_adam_lr0.0001_epoch200_stride32_T20_TfixedFalse.pt"
+PRETRAINED_CHECKPOINT="${PRETRAINED_CHECKPOINT:-checkpoints/nskt/unet_best.pt}"
 
 # select 12000, 24000, and 36000: 5, 7, 9 for eval OOD generalization
 
@@ -22,5 +26,5 @@ python eval.py \
     --is_T_fixed False \
     --patch_size 256 \
     --stride 32 \
-    --checkpoint_path $PRETRAINED_CHECKPOINT \
-    --scratch_dir '/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/'
+    --checkpoint_path "${PRETRAINED_CHECKPOINT}" \
+    --scratch_dir "${SCRATCH_DIR:-data/nskt/}"

@@ -2,13 +2,16 @@
 # Run on a compute node where four GPUs are already allocated.
 # This script does not submit or allocate a Slurm job.
 set -euo pipefail
-module load python
-conda activate "${CONDA_ENV_PATH:-/pscratch/sd/k/kenzhong/conda_env/genai}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
-export CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/checkpoint_Model_ft_FLEX3_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_T20_TfixedFalse_best.pt}"
+export CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/nskt/flex3_best.pt}"
 export CONFIG_PATH="${CONFIG_PATH:-config/nskt/flex_posttrain.yaml}"
 export TEST_SEED="${TEST_SEED:-3407}"
 export TOTAL_INTERP_STEPS="${TOTAL_INTERP_STEPS:-20}"

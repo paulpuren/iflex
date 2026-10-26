@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-module load python
-conda activate "${CONDA_ENV_PATH:-/pscratch/sd/k/kenzhong/conda_env/eden}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 
-cd "$(dirname "$0")/../../EDEN"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "${REPO_ROOT}/EDEN"
 
 CONFIG_PATH="${CONFIG_PATH:-configs/eval_eden_nskt.yaml}"
-VAE_CKPT="${VAE_CKPT:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_VAE/014/checkpoints/0020000.pt}"
-DIT_CKPT="${DIT_CKPT:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_DiT/015/checkpoints/0012000.pt}"
+VAE_CKPT="${VAE_CKPT:-${REPO_ROOT}/checkpoints/nskt/eden_vae.pt}"
+DIT_CKPT="${DIT_CKPT:-${REPO_ROOT}/checkpoints/nskt/eden_dit.pt}"
 
 RE_ID="${RE_ID:-9}"
 TOTAL_INTERP_STEPS="${TOTAL_INTERP_STEPS:-24}"
 TEST_SEED="${TEST_SEED:-3407}"
-SCRATCH_DIR="${SCRATCH_DIR:-/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/}"
+SCRATCH_DIR="${SCRATCH_DIR:-${REPO_ROOT}/data/nskt/}"
 CHECK_FILE="${SCRATCH_DIR%/}/600_2048_2048_seed_3407.h5"
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
 

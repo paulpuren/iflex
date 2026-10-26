@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-module load python
-conda activate "${CONDA_ENV_PATH:-/pscratch/sd/p/puren93/conda_env/eden}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 
-cd "$(dirname "$0")/../../EDEN"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "${REPO_ROOT}/EDEN"
 
 CONFIG_PATH="${CONFIG_PATH:-configs/eval_eden_sst.yaml}"
-VAE_CKPT="${VAE_CKPT:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_VAE/012/checkpoints/0012000.pt}"
-DIT_CKPT="${DIT_CKPT:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_DiT/013/checkpoints/0008000.pt}"
-SCRATCH_DIR="${SCRATCH_DIR:-/global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/}"
+VAE_CKPT="${VAE_CKPT:-${REPO_ROOT}/checkpoints/sst/eden_vae.pt}"
+DIT_CKPT="${DIT_CKPT:-${REPO_ROOT}/checkpoints/sst/eden_dit.pt}"
+SCRATCH_DIR="${SCRATCH_DIR:-${REPO_ROOT}/data/sst/}"
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
 
 visible_gpu_count() {

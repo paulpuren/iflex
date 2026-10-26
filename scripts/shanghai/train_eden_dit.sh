@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-module load python
-conda activate "${CONDA_ENV_PATH:-/pscratch/sd/p/puren93/conda_env/eden}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 
-cd "$(dirname "$0")/../../EDEN"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "${REPO_ROOT}/EDEN"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
 CONFIG_PATH="${CONFIG_PATH:-configs/train_dit_shanghai.yaml}"
-PRETRAINED_VAE_PATH="${PRETRAINED_VAE_PATH:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_VAE/013/checkpoints/0001800.pt}"
+PRETRAINED_VAE_PATH="${PRETRAINED_VAE_PATH:-${REPO_ROOT}/checkpoints/shanghai/eden_vae.pt}"
 RESUME_FROM_CKPT="${RESUME_FROM_CKPT:-}"
-DATA_PATH="${DATA_PATH:-/global/cfs/cdirs/m4633/puren/interp_dm/shanghai/shanghai.h5}"
+DATA_PATH="${DATA_PATH:-${REPO_ROOT}/data/shanghai/shanghai.h5}"
 
 CMD=(python -m accelerate.commands.launch --num_processes "${NUM_PROCESSES}" train_dit.py --config "${CONFIG_PATH}" --pretrained_vae_path "${PRETRAINED_VAE_PATH}")
 if [[ -n "${RESUME_FROM_CKPT}" ]]; then

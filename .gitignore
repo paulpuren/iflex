@@ -207,6 +207,8 @@ marimo/_lsp/
 __marimo__/
 
 # Local experiment artifacts and scientific data
+/data/
+/logs/
 /checkpoints/
 /samples/
 /wandb/

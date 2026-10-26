@@ -11,5 +11,5 @@ learning_rate: 6.0e-5
 total_interp_steps: 30 # 20
 total_interp_steps_train: 20
 is_T_fixed: true
-scratch_dir: /global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/
+scratch_dir: data/nskt/
 checkpoint_path: ''

@@ -1,7 +1,7 @@
 # Continue training one-step FLEXForecast on NSKT.
 # forecasting/train.py interprets `epochs` as the final target epoch, not the
-# number of extra epochs. With the checkpoint below at epoch 16, this resumes
-# from epoch 16 and continues until epoch 300.
+# number of extra epochs. Set checkpoint_path to your checkpoint and epochs
+# to the desired final epoch.
 run_name: FLEX_forecast_nskt_posttrain
 data_name: forecasting_nskt
 model: FLEXForecast
@@ -20,8 +20,7 @@ optimizer: adam
 epochs: 100 # 300
 batch_size: 12
 learning_rate: 1.0e-4
-checkpoint_path: /pscratch/sd/p/puren93/puren/Interp-DM/checkpoints/checkpoint_Model_ft_FLEXForecast_ReNorm40000_small_mlp2_Data_forecasting_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_oneStepForecast_last.pt
-# checkpoints/checkpoint_Model_ft_FLEXForecast_small_mlp2_Data_forecasting_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_oneStepForecast_last.pt
+checkpoint_path: checkpoints/forecasting_nskt/flexforecast_renorm40000_last.pt
 resume_training: true # false
 total_interp_steps_train: 1
 is_T_fixed: true
@@ -32,7 +31,7 @@ rollout_batch_size: 0
 forecast_conditioning_mode: forecast
 patch_size: 256
 stride: 32
-scratch_dir: /global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/
+scratch_dir: data/nskt/
 prediction_type: v
 sampler: ddim
 time_steps: 3

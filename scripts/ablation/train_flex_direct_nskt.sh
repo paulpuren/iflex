@@ -1,8 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-module load python
-conda activate /pscratch/sd/k/kenzhong/conda_env/genai
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 cd "$(dirname "$0")/../.."
 
 CONFIG_PATH="${CONFIG_PATH:-config/ablation/flex_direct_nskt.yaml}"

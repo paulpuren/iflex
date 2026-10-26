@@ -4,17 +4,19 @@ set -euo pipefail
 # Example:
 #   bash scripts/forecasting/eval_flex_forecast_nskt.sh
 #   RE_ID=9 FORECAST_HORIZON=20 bash scripts/forecasting/eval_flex_forecast_nskt.sh
-#   CHECKPOINT_PATH=./checkpoints/checkpoint_Model_FLEXForecast_..._best.pt bash scripts/forecasting/eval_flex_forecast_nskt.sh
 
-module load python
-conda activate /pscratch/sd/p/puren93/conda_env/genai
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 cd "$(dirname "$0")/../.."
 
 CONFIG_PATH="${CONFIG_PATH:-config/forecasting/eval_flex_forecast_nskt.yaml}"
 RE_ID="${RE_ID:-5}"
 FORECAST_HORIZON="${FORECAST_HORIZON:-20}"
 BATCH_SIZE="${BATCH_SIZE:-12}"
-CHECKPOINT_PATH="${CHECKPOINT_PATH:-/pscratch/sd/p/puren93/puren/Interp-DM/checkpoints/checkpoint_Model_ft_FLEXForecast_ReNorm40000_small_mlp2_Data_forecasting_nskt_Optim_adam_cosine_lr0.0001_epoch100_patchsize256_stride32_oneStepForecast_best.pt}"
+CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/forecasting_nskt/flexforecast_renorm40000_best.pt}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 CMD=(

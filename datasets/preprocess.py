@@ -9,7 +9,7 @@ from PIL import Image
 TRAIN_TEST_SPLIT = 0.85
 THRESHOLD = 3.0
 
-scratch_dir = "/global/cfs/cdirs/m4633/puren/interp_dm/shanghai/"
+scratch_dir = "data/shanghai/"
 # data_dir = "/data/to/path/nh_radar_comp_echo"
 data_dir = scratch_dir + "nh_radar_comp_echo"
 

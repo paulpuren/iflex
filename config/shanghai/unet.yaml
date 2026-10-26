@@ -12,7 +12,7 @@ total_interp_steps_train: 20
 is_T_fixed: false
 patch_size: 256
 stride: 64
-scratch_dir: /global/cfs/cdirs/m4633/puren/interp_dm/shanghai/shanghai.h5
+scratch_dir: data/shanghai/shanghai.h5
 prediction_type: v
 sampler: ddim
 time_steps: 10

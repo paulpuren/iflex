@@ -392,8 +392,6 @@ if __name__ == '__main__':
     # from utils import read_samples, show_img_info
     # SCALE = 90.0
     
-    # _, targets1, sampled1, mus1 = read_samples("/Users/demin/CodeSpace/MyWork/STD/exps/data_samples/100000-0-8")
-    # _, targets2, sampled2, mus2 = read_samples("/Users/demin/CodeSpace/MyWork/STD/exps/data_samples/100000-0-9")
     
     
     

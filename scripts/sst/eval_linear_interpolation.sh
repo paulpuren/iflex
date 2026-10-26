@@ -3,14 +3,17 @@ set -euo pipefail
 
 # Plain endpoint linear-interpolation baseline. No checkpoint or GPU is needed.
 
-module load python
-conda activate "${CONDA_ENV_PATH:-/pscratch/sd/p/puren93/conda_env/genai}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 cd "$(dirname "$0")/../.."
 
 TOTAL_INTERP_STEPS="${TOTAL_INTERP_STEPS:-10}"
 BATCH_SIZE="${BATCH_SIZE:-12}"
 PATCH_SIZE="${PATCH_SIZE:-128}"
-SCRATCH_DIR="${SCRATCH_DIR:-/global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/}"
+SCRATCH_DIR="${SCRATCH_DIR:-data/sst/}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 # shellcheck disable=SC2086

@@ -5,9 +5,6 @@
 # Submit with:
 #   sbatch scripts/nskt/slurm_eval_full_flex_seed3407.sh
 #SBATCH --job-name=flex-all-re-s3407
-#SBATCH --account=m4633
-#SBATCH --constraint=gpu
-#SBATCH --qos=regular
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -21,7 +18,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
 export MODEL=flex
-export CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/checkpoint_Model_ft_FLEX3_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch300_patchsize256_stride32_T20_TfixedFalse_best.pt}"
+export CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/nskt/flex3_best.pt}"
 export TEST_SEED=3407
 export NSKT_EVAL_MAX_SAMPLES="${NSKT_EVAL_MAX_SAMPLES:-256}"
 export CONFIG_PATH=config/nskt/flex_posttrain.yaml

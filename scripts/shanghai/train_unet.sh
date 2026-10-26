@@ -1,10 +1,12 @@
-# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m5262
+#!/usr/bin/env bash
+set -euo pipefail
 
-module load python
-conda activate /pscratch/sd/p/puren93/conda_env/genai
-cd ../../
-
-PRETRAINED_MODEL_PATH="checkpoints/checkpoint_Model_UNet_Data_shanghai_Optim_lion_lr1e-05_epoch100_stride64_T20_TfixedFalse.pt"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
+cd "$(dirname "$0")/../.."
 
 # run shanghai radar data
 python train_unet.py \
@@ -21,4 +23,4 @@ python train_unet.py \
     --is_T_fixed False \
     --patch_size 128 \
     --stride 32 \
-    --scratch_dir '/global/cfs/cdirs/m4633/puren/interp_dm/shanghai/shanghai.h5'
+    --scratch_dir "${SCRATCH_DIR:-data/shanghai/shanghai.h5}"

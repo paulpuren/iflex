@@ -12,7 +12,7 @@ total_interp_steps_train: 10
 is_T_fixed: true
 patch_size: 128
 stride: 32
-scratch_dir: /global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/
+scratch_dir: data/sst/
 prediction_type: v
 sampler: ddim
 base_width: 128

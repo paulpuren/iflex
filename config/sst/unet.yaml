@@ -7,12 +7,12 @@ optimizer: adam
 epochs: 30
 batch_size: 16
 learning_rate: 1.0e-4
-checkpoint_path: checkpoints/checkpoint_Model_UNet_Data_sea_temp_Optim_adam_lr0.0001_epoch30_stride64_T10_TfixedFalse.pt
+checkpoint_path: checkpoints/sst/unet_best.pt
 total_interp_steps_train: 10
 is_T_fixed: false
 patch_size: 128
 stride: 64
-scratch_dir: /global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/
+scratch_dir: data/sst/
 prediction_type: v
 sampler: ddim
 time_steps: 10

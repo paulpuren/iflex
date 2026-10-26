@@ -5,8 +5,11 @@ set -euo pipefail
 # This script uses the EDEN conda environment and keeps EDEN checkpoint/config
 # defaults separate from the root-repo UNet/SuperSloMo/FLEX sweep.
 
-module load python
-conda activate "${EDEN_CONDA_ENV_PATH:-/pscratch/sd/p/puren93/conda_env/eden}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${EDEN_CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${EDEN_CONDA_ENV_PATH}"
+fi
 
 cd "$(dirname "$0")/.."
 
@@ -35,10 +38,10 @@ require_file() {
 # NSKT, Re=36000 by default.
 NSKT_RE_ID="${NSKT_RE_ID:-9}"
 NSKT_STEPS="${NSKT_STEPS:-20}"
-NSKT_SCRATCH="${NSKT_SCRATCH:-/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor/}"
+NSKT_SCRATCH="${NSKT_SCRATCH:-data/nskt/}"
 NSKT_EDEN_CONFIG="${NSKT_EDEN_CONFIG:-EDEN/configs/eval_eden_nskt.yaml}"
-NSKT_EDEN_VAE_CHECKPOINT="${NSKT_EDEN_VAE_CHECKPOINT:-EDEN/output/experiments-EDEN_VAE/014/checkpoints/0020000.pt}"
-NSKT_EDEN_DIT_CHECKPOINT="${NSKT_EDEN_DIT_CHECKPOINT:-EDEN/output/experiments-EDEN_DiT/015/checkpoints/0012000.pt}"
+NSKT_EDEN_VAE_CHECKPOINT="${NSKT_EDEN_VAE_CHECKPOINT:-checkpoints/nskt/eden_vae.pt}"
+NSKT_EDEN_DIT_CHECKPOINT="${NSKT_EDEN_DIT_CHECKPOINT:-checkpoints/nskt/eden_dit.pt}"
 require_file "${NSKT_EDEN_CONFIG}"
 require_file "${NSKT_EDEN_VAE_CHECKPOINT}"
 require_file "${NSKT_EDEN_DIT_CHECKPOINT}"
@@ -51,10 +54,10 @@ run_eden_bench --config "${NSKT_EDEN_CONFIG}" \
 
 # Shanghai.
 SHANGHAI_STEPS="${SHANGHAI_STEPS:-8}"
-SHANGHAI_DATA="${SHANGHAI_DATA:-/global/cfs/cdirs/m4633/puren/interp_dm/shanghai/shanghai.h5}"
+SHANGHAI_DATA="${SHANGHAI_DATA:-data/shanghai/shanghai.h5}"
 SHANGHAI_EDEN_CONFIG="${SHANGHAI_EDEN_CONFIG:-EDEN/configs/eval_eden_shanghai.yaml}"
-SHANGHAI_EDEN_VAE_CHECKPOINT="${SHANGHAI_EDEN_VAE_CHECKPOINT:-EDEN/output/experiments-EDEN_VAE/013/checkpoints/0001800.pt}"
-SHANGHAI_EDEN_DIT_CHECKPOINT="${SHANGHAI_EDEN_DIT_CHECKPOINT:-EDEN/output/experiments-EDEN_DiT/014/checkpoints/0002000.pt}"
+SHANGHAI_EDEN_VAE_CHECKPOINT="${SHANGHAI_EDEN_VAE_CHECKPOINT:-checkpoints/shanghai/eden_vae.pt}"
+SHANGHAI_EDEN_DIT_CHECKPOINT="${SHANGHAI_EDEN_DIT_CHECKPOINT:-checkpoints/shanghai/eden_dit.pt}"
 require_file "${SHANGHAI_EDEN_CONFIG}"
 require_file "${SHANGHAI_EDEN_VAE_CHECKPOINT}"
 require_file "${SHANGHAI_EDEN_DIT_CHECKPOINT}"
@@ -67,10 +70,10 @@ run_eden_bench --config "${SHANGHAI_EDEN_CONFIG}" \
 
 # SST / sea temperature.
 SST_STEPS="${SST_STEPS:-10}"
-SST_DATA="${SST_DATA:-/global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/}"
+SST_DATA="${SST_DATA:-data/sst/}"
 SST_EDEN_CONFIG="${SST_EDEN_CONFIG:-EDEN/configs/eval_eden_sst.yaml}"
-SST_EDEN_VAE_CHECKPOINT="${SST_EDEN_VAE_CHECKPOINT:-EDEN/output/experiments-EDEN_VAE/012/checkpoints/0012000.pt}"
-SST_EDEN_DIT_CHECKPOINT="${SST_EDEN_DIT_CHECKPOINT:-EDEN/output/experiments-EDEN_DiT/013/checkpoints/0008000.pt}"
+SST_EDEN_VAE_CHECKPOINT="${SST_EDEN_VAE_CHECKPOINT:-checkpoints/sst/eden_vae.pt}"
+SST_EDEN_DIT_CHECKPOINT="${SST_EDEN_DIT_CHECKPOINT:-checkpoints/sst/eden_dit.pt}"
 require_file "${SST_EDEN_CONFIG}"
 require_file "${SST_EDEN_VAE_CHECKPOINT}"
 require_file "${SST_EDEN_DIT_CHECKPOINT}"

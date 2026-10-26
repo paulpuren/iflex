@@ -33,7 +33,7 @@ export WANDB_MODE=offline
 
 ## Data preparation
 
-Store large datasets outside the repository and pass their location through `--scratch_dir`.
+Defaults use `data/nskt/`, `data/sst/`, and `data/shanghai/shanghai.h5`, relative to the repository root. Place data there, symlink those locations to external storage, or pass another location through `--scratch_dir`. The `data/` directory is ignored by Git.
 
 - **NSKT:** the current interpolation loader uses filenames such as `2000_2048_2048_seed_2150.h5`. Training/validation Reynolds numbers are 2000, 4000, 8000, 16000, and 32000, using seed 2150. Evaluation uses seed 3407 by default and supports additional Reynolds numbers. See `datasets/data_nskt_updated.py` for the complete lists and sampling logic.
 - **Shanghai:** pass the path to the HDF5 file. See `datasets/data_shanghai.py` for group and sample layout. The current loader maps validation to the `test` group; account for this when interpreting validation-selected results.
@@ -67,7 +67,18 @@ python train_super_slomo.py --config config/nskt/super_slomo.yaml --scratch_dir 
 
 For these training commands, precedence is **explicit command-line options > YAML values > parser defaults**. Post-training configurations may require an existing checkpoint; use the base configurations above for training from scratch. FLEX uses `--resume_training true` to retain the checkpoint epoch and optimizer state; the default finetuning path starts a fresh epoch schedule.
 
-The shell scripts under `scripts/` are experiment templates for the original HPC environment. They contain cluster module commands, private Conda paths, data paths, and checkpoint defaults. Adapt those before use; the direct Python commands above avoid their environment setup.
+The shell scripts under `scripts/` use your active Python environment. Optionally set `CONDA_ENV_PATH` to a Conda environment name or absolute path; the EDEN benchmark uses `EDEN_CONDA_ENV_PATH`. Activate an environment with the appropriate dependencies before launching.
+
+Checkpoint paths in configs and scripts are generic placeholders under `checkpoints/<dataset>/`. Supply a compatible trained checkpoint using `--checkpoint_path`, edit the YAML, or use the launcher's `CHECKPOINT_PATH` (some UNet launchers use `PRETRAINED_PATH` or `PRETRAINED_CHECKPOINT`). Training retains its generated checkpoint filenames; it does not automatically create these placeholder files. For example:
+
+```bash
+SCRATCH_DIR=/path/to/nskt CHECKPOINT_PATH=/path/to/model.pt \
+  bash scripts/nskt/eval_flex_nskt.sh
+```
+
+Data overrides in shell launchers use `SCRATCH_DIR` or `DATA_PATH` where provided; config-based training can use a custom YAML through `CONFIG_PATH`. EDEN launchers default to the same repository-level data and checkpoint directories, while their config paths are relative to `EDEN/`; use absolute paths for custom EDEN overrides.
+
+Slurm wrappers retain generic resource requests. Supply your own account, partition, and any required site options when submitting, and create `logs/` first. Adjust GPU/CPU counts and time limits for your cluster.
 
 ## Evaluation
 
@@ -93,7 +104,6 @@ Metrics include relative Frobenius norm error (RFNE), R², and dataset-specific 
 
 - `forecasting/` contains NSKT forecasting code, with configurations in `config/forecasting/` and launchers in `scripts/forecasting/`.
 - `src/ablation/`, `config/ablation/`, and `scripts/ablation/` contain interpolation variants.
-- `analysis/` contains notebooks and figure-generation scripts. Some retain local experiment paths and require predictions or checkpoints from completed runs.
 - `scripts/benchmark_inference_time.py` provides inference benchmarking.
 
 **EDEN integration:** EDEN launchers and analysis hooks are included, but the `EDEN/` implementation and its checkpoints are absent from this checkout. Those workflows require a compatible external EDEN checkout at that location and its own dependencies. The root requirements file covers this repository's code, not the absent EDEN environment.
@@ -108,7 +118,6 @@ Metrics include relative Frobenius norm error (RFNE), R², and dataset-specific 
 ├── forecasting/          # NSKT forecasting implementation
 ├── config/               # YAML experiment settings
 ├── scripts/              # Experiment launchers and benchmarks
-├── analysis/             # Notebooks and publication figures
 ├── tests/                # Lightweight regression checks
 ├── requirements.txt
 └── LICENSE

@@ -1,22 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m5262
-
 # Example:
 #   bash scripts/ablation/eval_flex_residual_nskt.sh
 #   RE_ID=0 TOTAL_INTERP_STEPS=20 bash scripts/ablation/eval_flex_residual_nskt.sh
-#   CHECKPOINT_PATH=./checkpoints/checkpoint_Model_FLEXResidual_..._best.pt bash scripts/ablation/eval_flex_residual_nskt.sh
 
-module load python
-conda activate /pscratch/sd/p/puren93/conda_env/genai
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 cd "$(dirname "$0")/../.."
 
 CONFIG_PATH="${CONFIG_PATH:-config/ablation/flex_residual_nskt_posttrain.yaml}"
 RE_ID="${RE_ID:--1}"
 TOTAL_INTERP_STEPS="${TOTAL_INTERP_STEPS:-10}"
 BATCH_SIZE="${BATCH_SIZE:-12}"
-CHECKPOINT_PATH="${CHECKPOINT_PATH:-/pscratch/sd/p/puren93/puren/Interp-DM/checkpoints/checkpoint_Model_ft_FLEXResidualZero_small_mlp2_Data_nskt_Optim_adam_cosine_lr0.0001_epoch150_patchsize256_stride32_T20_TfixedFalse_best.pt}"
+CHECKPOINT_PATH="${CHECKPOINT_PATH:-checkpoints/nskt/flexresidualzero_best.pt}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 CMD=(

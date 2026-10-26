@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-module load python
-conda activate "${CONDA_ENV_PATH:-/pscratch/sd/p/puren93/conda_env/eden}"
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 
-cd "$(dirname "$0")/../../EDEN"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "${REPO_ROOT}/EDEN"
 
 CONFIG_PATH="${CONFIG_PATH:-configs/eval_eden_shanghai.yaml}"
 
-VAE_CKPT="${VAE_CKPT:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_VAE/013/checkpoints/0001800.pt}"
+VAE_CKPT="${VAE_CKPT:-${REPO_ROOT}/checkpoints/shanghai/eden_vae.pt}"
 
-DIT_CKPT="${DIT_CKPT:-/pscratch/sd/p/puren93/puren/Interp-DM/EDEN/output/experiments-EDEN_DiT/014/checkpoints/0002000.pt}"
+DIT_CKPT="${DIT_CKPT:-${REPO_ROOT}/checkpoints/shanghai/eden_dit.pt}"
 
-SCRATCH_DIR="${SCRATCH_DIR:-/global/cfs/cdirs/m4633/puren/interp_dm/shanghai/shanghai.h5}"
+SCRATCH_DIR="${SCRATCH_DIR:-${REPO_ROOT}/data/shanghai/shanghai.h5}"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
 

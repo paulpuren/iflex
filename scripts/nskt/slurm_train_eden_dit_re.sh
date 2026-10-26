@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=eden-nskt-re
-#SBATCH --account=m4633
-#SBATCH --constraint=gpu
-#SBATCH --qos=regular
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gpus=4

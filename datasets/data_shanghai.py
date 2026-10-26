@@ -140,7 +140,7 @@ def gray2color(image, **kwargs):
 
 
 if __name__ == '__main__':
-    data_path = "/global/cfs/cdirs/m4633/puren/interp_dm/shanghai/"
+    data_path = "data/shanghai/"
     dataset = Shanghai(data_path + 'shanghai.h5', 128)
     sample1 = dataset.sample()
     sample2 = dataset.sample()

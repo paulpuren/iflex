@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# salloc -N 1 -C gpu -q interactive -t 04:00:00 -G 4 -A m5262
-
 # Example:
 #   bash scripts/sst/eval_unet_sst.sh
 #   CUDA_VISIBLE_DEVICES=0 bash scripts/sst/eval_unet_sst.sh
 #   TOTAL_INTERP_STEPS_EVAL=20 BATCH_SIZE=8 bash scripts/sst/eval_unet_sst.sh
 
-module load python
-conda activate /pscratch/sd/p/puren93/conda_env/genai
+# Uses the active Python environment unless an explicit Conda environment is supplied.
+if [[ -n "${CONDA_ENV_PATH:-}" ]]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENV_PATH}"
+fi
 
 # Run from repository root (script lives in scripts/sst/)
 cd "$(dirname "$0")/../.."
@@ -33,7 +34,6 @@ export USE_MULTI_GPU
 
 # ---- checkpoint/run-name-matching args (must match training config) ----
 # Matches:
-# checkpoints/checkpoint_Model_UNet_Data_sea_temp_Optim_adam_lr0.0001_epoch30_stride64_T10_TfixedFalse.pt
 MODEL="${MODEL:-UNet}"
 DATA_NAME="${DATA_NAME:-sea_temp}"
 OPTIMIZER="${OPTIMIZER:-adam}"
@@ -49,7 +49,7 @@ PATCH_SIZE="${PATCH_SIZE:-128}"
 TIME_STEPS="${TIME_STEPS:-10}"
 PREDICTION_TYPE="${PREDICTION_TYPE:-v}"
 TOTAL_INTERP_STEPS_EVAL="${TOTAL_INTERP_STEPS_EVAL:-10}"
-SCRATCH_DIR="${SCRATCH_DIR:-/global/cfs/projectdirs/m4633/puren/interp_dm/sea_temp/}"
+SCRATCH_DIR="${SCRATCH_DIR:-data/sst/}"
 SST_EVAL_MAX_SAMPLES="${SST_EVAL_MAX_SAMPLES:-2048}"
 
 SST_EVAL_MAX_SAMPLES="${SST_EVAL_MAX_SAMPLES}" \

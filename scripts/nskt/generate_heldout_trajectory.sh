@@ -7,7 +7,7 @@ set -euo pipefail
 : "${NSKT_SOLVER_DIR:?Set NSKT_SOLVER_DIR to the complete solver bundle (NS_KT.py, utils.py)}"
 : "${NSKT_CONFIG_TEMPLATE:?Set NSKT_CONFIG_TEMPLATE to the original 2048-resolution YAML}"
 
-OUTPUT_DIR="${OUTPUT_DIR:-/global/cfs/cdirs/m4633/foundationmodel/nskt_tensor}"
+OUTPUT_DIR="${OUTPUT_DIR:-data/nskt}"
 RESOLUTION="${RESOLUTION:-2048}"
 # NSKT_eval reads only vorticity. With 2000 candidate indices and T=20 it
 # accesses at most frames 0..138, so 140 frames retain the complete protocol.
