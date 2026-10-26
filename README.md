@@ -25,10 +25,10 @@ Below is an example of turbulence comparison between ground truth, baseline, and
 | Dataset | Task | Data expected by the loaders |
 | --- | --- | --- |
 | NSKT | Turbulent flow interpolation and forecasting | HDF5 trajectories with a `w` array shaped `(time, height, width)` |
-| Shanghai | Radar frame interpolation | An HDF5 file containing `train` and `test` groups with `all_len` and sample sequences |
-| SST | Sea surface temperature interpolation | Regional NumPy fields, latitude/longitude arrays, and cached sequence indices |
+| [Shanghai](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/2GKMQJ) | Radar frame interpolation | An HDF5 file containing `train` and `test` groups with `all_len` and sample sequences |
+| [SST](https://drive.google.com/drive/folders/127ki3Oo8xt1KVfjgtsRqeuf853jgf98E) (adapted from [HelmFluid](https://github.com/thuml/HelmFluid)) | Sea surface temperature interpolation | Regional NumPy fields, latitude/longitude arrays, and cached sequence indices |
 
-Datasets and trained checkpoints will be released later.
+
 
 ## Installation
 
