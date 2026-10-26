@@ -16,7 +16,7 @@ iFLEX is a two-stage framework for temporal interpolation of scientific fields f
 Below is an example of turbulence comparison between ground truth, baseline, and the iFLEX model. In these examples, iFLEX more closely reproduces the vortex structures in the ground-truth turbulence fields than Super SloMo. The panels compare the ground truth with reconstructions from Super SloMo and iFLEX at $t=0.005\,\mathrm{s}$ and $t=0.02\,\mathrm{s}$, using the same two endpoint observations. Red boxes highlight differences in vortex shape and fine-scale structures. Each intermediate field is reconstructed independently.
 
 <p align="center">
-  <img width="85%" src="asset/teaser_fig.png" alt="A representative example of turbulence comparison between ground truth, baseline, and the iFLEX model">
+  <img width="85%" src="assets/teaser_fig.png" alt="A representative example of turbulence comparison between ground truth, baseline, and the iFLEX model">
 </p>
 
 
@@ -152,6 +152,27 @@ python -m unittest discover -s tests -v
 
 GPU training and evaluation require the matching datasets and checkpoints. Record package versions, GPU hardware, random seeds, data splits, and the exact configuration when reporting results. See [REVIEW.md](REVIEW.md) for the publication review and remaining limitations.
 
+
+## Citation
+
+If you find our research helpful, please consider citing our paper:
+
+```bibtex
+@article{ren_iflex,
+  author = {Ren, Pu and Mahoney, Michael W. and Erichson, N. Benjamin},
+  title = {Generative Refinement Learning for Temporal Interpolation in Scientific Machine Learning},
+  journal = {Transactions on Machine Learning Research},
+  year = {2026},
+  url = {https://openreview.net/forum?id=esqLKv6O2P}
+}
+```
+
+
 ## License and acknowledgments
 
 This repository is licensed under [GNU GPL v3](LICENSE). Retain applicable upstream attribution and licenses when distributing third-party code. The Shanghai loader cites DiffCast, and model components reference prior interpolation and diffusion implementations in their source files.
+
+
+## Contact
+
+If you have any questions or comments, please feel free to contact me through email (puren1028 AT gmail DOT com).
