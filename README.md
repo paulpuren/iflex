@@ -1,6 +1,24 @@
-# FLEX: Generative Refinement for Temporal Interpolation
+# :earth_americas: iFLEX: A Diffusion Model for Temporal Interpolation
 
-PyTorch research code for temporal interpolation of scientific fields. FLEX combines endpoint conditioning with diffusion refinement to predict intermediate states between two observed frames. The repository also includes UNet, SuperSloMo, and linear interpolation baselines, along with NSKT forecasting and interpolation ablations.
+> **[TMLR] Generative Refinement Learning for Temporal Interpolation in Scientific Machine Learning**
+> 
+> Pu Ren, Michael W. Mahoney, and N. Benjamin Erichson
+
+
+This repository provides the official PyTorch implementation of **[iFLEX](https://openreview.net/forum?id=esqLKv6O2P)**. iFLEX is a rsearch code for temporal interpolation of physical fields using diffusion models. 
+
+
+## Overview
+
+iFLEX is a two-stage framework for temporal interpolation of scientific fields from sparsely sampled observations. It combines endpoint-consistent linear interpolation with conditional diffusion to reconstruct intermediate states between two observed snapshots. The first stage provides a linear reference, while the second learns the residual correction conditioned on both endpoint fields, the target interpolation time, the temporal interval, and available physical parameters. iFLEX supports arbitrary-time interpolation and is evaluated on turbulence, radar precipitation, and sea surface temperature datasets. The repository also includes UNet, SuperSloMo, EDEN, and linear interpolation baselines.
+
+
+Below is an example of turbulence comparison between ground truth, baseline, and the iFLEX model. In these examples, iFLEX more closely reproduces the vortex structures in the ground-truth turbulence fields than Super SloMo. The panels compare the ground truth with reconstructions from Super SloMo and iFLEX at $t=0.005\,\mathrm{s}$ and $t=0.02\,\mathrm{s}$, using the same two endpoint observations. Red boxes highlight differences in vortex shape and fine-scale structures. Each intermediate field is reconstructed independently.
+
+<p align="center">
+  <img width="85%" src="asset/teaser_fig.png" alt="A representative example of turbulence comparison between ground truth, baseline, and the iFLEX model">
+</p>
+
 
 ## Supported datasets
 
@@ -10,7 +28,7 @@ PyTorch research code for temporal interpolation of scientific fields. FLEX comb
 | Shanghai | Radar frame interpolation | An HDF5 file containing `train` and `test` groups with `all_len` and sample sequences |
 | SST | Sea surface temperature interpolation | Regional NumPy fields, latitude/longitude arrays, and cached sequence indices |
 
-Datasets and trained checkpoints are not distributed with this repository. Loader-specific preprocessing and file naming must match the supplied code.
+Datasets and trained checkpoints will be released later.
 
 ## Installation
 
@@ -106,7 +124,8 @@ Metrics include relative Frobenius norm error (RFNE), R², and dataset-specific 
 - `src/ablation/`, `config/ablation/`, and `scripts/ablation/` contain interpolation variants.
 - `scripts/benchmark_inference_time.py` provides inference benchmarking.
 
-**EDEN integration:** EDEN launchers and analysis hooks are included, but the `EDEN/` implementation and its checkpoints are absent from this checkout. Those workflows require a compatible external EDEN checkout at that location and its own dependencies. The root requirements file covers this repository's code, not the absent EDEN environment.
+**EDEN integration:** EDEN launchers and analysis hooks are included. The EDEN code can be found from [here](https://github.com/bbldCVer/EDEN).  
+
 
 ## Repository layout
 
